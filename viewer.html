@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hyperbolic Polygon Tiling</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { height: 100%; margin: 0; background: #0d0f12; }
+    #app { position: fixed; inset: 0; }
+    .shader-menu {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      background: rgba(13, 15, 18, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #e9eaec;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+    .shader-menu .section-label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(233, 234, 236, 0.72);
+    }
+    .shader-menu select,
+    .shader-menu input {
+      width: 220px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(233, 234, 236, 0.24);
+      background: rgba(11, 13, 16, 0.55);
+      color: inherit;
+      appearance: none;
+    }
+    .shader-menu select:focus,
+    .shader-menu input:focus {
+      outline: none;
+      border-color: rgba(132, 193, 255, 0.7);
+      box-shadow: 0 0 0 2px rgba(132, 193, 255, 0.25);
+    }
+    .shader-menu .field {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .shader-menu .field-label {
+      font-size: 12px;
+      color: rgba(233, 234, 236, 0.86);
+    }
+    .shader-menu .file-drop {
+      margin-top: 10px;
+      padding: 12px 10px;
+      border: 1px dashed rgba(233, 234, 236, 0.35);
+      border-radius: 6px;
+      text-align: center;
+      font-size: 12px;
+      color: rgba(233, 234, 236, 0.75);
+      cursor: pointer;
+      transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+    }
+    .shader-menu .file-drop.dragover {
+      border-color: rgba(132, 193, 255, 0.85);
+      color: rgba(233, 241, 255, 0.9);
+      background: rgba(23, 33, 55, 0.35);
+    }
+    .shader-menu .file-input {
+      display: none;
+    }
+    .shader-menu--compact {
+      padding: 8px 10px;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import vertexShader from './shaders/common.vert.glsl?raw';
+
+const shaderPresets = {
+  disc: {
+    path: './shaders/disc.frag.glsl',
+    title: 'Hyperbolic Polygon Tiling (Poincaré Disk)',
+    uniforms: [
+      {
+        uniform: 'uN',
+        param: 'N',
+        label: 'N (≥ 5)',
+        default: 5,
+        step: 1,
+        min: 5,
+        sanitize: (value) => Math.max(5, Math.round(value))
+      },
+      {
+        uniform: 'uA',
+        param: 'A',
+        label: 'a (> 0)',
+        default: 0.6,
+        step: 0.1,
+        min: 1e-4,
+        sanitize: (value) => Math.max(1e-4, value)
+      }
+    ]
+  },
+  uhp: {
+    path: './shaders/uhp.frag.glsl',
+    title: 'Hyperbolic Polygon Tiling (UHP)',
+    uniforms: [
+      {
+        uniform: 'uN',
+        param: 'N',
+        label: 'N (≥ 5)',
+        default: 6,
+        step: 1,
+        min: 5,
+        sanitize: (value) => Math.max(5, Math.round(value))
+      },
+      {
+        uniform: 'uA',
+        param: 'A',
+        label: 'a (> 0)',
+        default: 0.6,
+        step: 0.1,
+        min: 1e-4,
+        sanitize: (value) => Math.max(1e-4, value)
+      }
+    ]
+  },
+  uhp4colored: {
+    path: './shaders/uhp4colored.frag.glsl',
+    title: 'Hyperbolic Polygon Tiling (UHP, 4-colored)',
+    uniforms: [
+      {
+        uniform: 'uN',
+        param: 'N',
+        label: 'N (≥ 5)',
+        default: 5,
+        step: 1,
+        min: 5,
+        sanitize: (value) => Math.max(5, Math.round(value))
+      },
+      {
+        uniform: 'uA',
+        param: 'A',
+        label: 'a (> 0)',
+        default: 0.6,
+        step: 0.1,
+        min: 1e-4,
+        sanitize: (value) => Math.max(1e-4, value)
+      }
+    ]
+  },
+  binarysquare: {
+    path: './shaders/binarySquare.frag.glsl',
+    title: 'Conformal Poincaré Square',
+    uniforms: []
+  },
+  binarytiling1: {
+    path: './shaders/binaryTiling1.frag.glsl',
+    title: 'Binary Tiling (Variant 1)',
+    uniforms: []
+  },
+  binarytiling1uhp: {
+    path: './shaders/binaryTiling1Uhp.frag.glsl',
+    title: 'Binary Tiling (Variant 1, UHP view)',
+    uniforms: []
+  },
+  binarytiling2: {
+    path: './shaders/binaryTiling2.frag.glsl',
+    title: 'Binary Tiling (Variant 2)',
+    uniforms: []
+  },
+  binarytiling2uhp: {
+    path: './shaders/binaryTiling2Uhp.frag.glsl',
+    title: 'Binary Tiling (Variant 2, UHP view)',
+    uniforms: []
+  },
+  binarytiling3: {
+    path: './shaders/binaryTiling3.frag.glsl',
+    title: 'Binary Tiling (Variant 3)',
+    uniforms: []
+  },
+  binarycaps: {
+    path: './shaders/binaryTilingWithCaps.frag.glsl',
+    title: 'Binary Tiling with Caps',
+    uniforms: []
+  },
+  binarytilingtexture: {
+    path: './shaders/binaryTilingTexture.frag.glsl',
+    title: 'Binary Tiling (Texture, UHP view)',
+    uniforms: [],
+    textureUniform: 'uTexture'
+  }
+};
+
+const textureModules = import.meta.glob('./textures/*.{png,jpg,jpeg,webp}', {
+  eager: true,
+  import: 'default'
+});
+
+const availableTextures = Object.entries(textureModules).map(([path, url]) => {
+  const segments = path.split('/');
+  const fileName = segments[segments.length - 1];
+  const baseName = fileName.replace(/\.[^.]+$/, '');
+  const label = baseName.replace(/[_-]+/g, ' ');
+  return {
+    id: path,
+    label,
+    path: url
+  };
+}).sort((a, b) => a.label.localeCompare(b.label));
+
+const params = new URLSearchParams(window.location.search);
+const shaderKey = params.get('shader')?.toLowerCase() || 'disc';
+const preset = shaderPresets[shaderKey] ?? shaderPresets.disc;
+const presetUniforms = preset.uniforms ?? [];
+const textureUniformKeyFromPreset = preset.textureUniform ?? null;
+const textureConfigs = textureUniformKeyFromPreset
+  ? availableTextures.map((cfg) => ({ ...cfg, uniform: textureUniformKeyFromPreset }))
+  : [];
+const textureIdFor = (cfg) => (cfg?.id ?? cfg?.path);
+const textureParam = params.get('texture');
+const selectedTextureConfig = textureConfigs.length
+  ? textureConfigs.find((cfg) => textureIdFor(cfg) === textureParam) ?? textureConfigs[0]
+  : null;
+let selectedTextureId = selectedTextureConfig ? textureIdFor(selectedTextureConfig) : null;
+const textureLoader = new THREE.TextureLoader();
+const textureUniformKey = selectedTextureConfig?.uniform ?? textureUniformKeyFromPreset;
+let currentTexture = null;
+let material = null;
+
+async function loadTextureFromConfig(cfg) {
+  const tex = await textureLoader.loadAsync(cfg.path);
+  if (cfg.flipY !== undefined) tex.flipY = cfg.flipY;
+  if (cfg.colorSpace && THREE[cfg.colorSpace]) {
+    tex.colorSpace = THREE[cfg.colorSpace];
+  }
+  if (cfg.wrap === 'repeat') {
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  }
+  tex.needsUpdate = true;
+  return tex;
+}
+
+if (!shaderPresets[shaderKey]) {
+  console.warn(`Unknown shader "${shaderKey}", falling back to "disc".`);
+}
+
+const uniformValues = {};
+for (const cfg of presetUniforms) {
+  const candidates = [cfg.param, cfg.param?.toLowerCase?.()];
+  let rawValue;
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (params.has(candidate)) {
+      rawValue = params.get(candidate);
+      break;
+    }
+  }
+  const parsed = Number(rawValue);
+  const value = cfg.sanitize
+    ? cfg.sanitize(Number.isFinite(parsed) ? parsed : cfg.default)
+    : (Number.isFinite(parsed) ? parsed : cfg.default);
+  uniformValues[cfg.uniform] = value;
+}
+
+const menu = document.createElement('div');
+menu.className = 'shader-menu';
+
+const label = document.createElement('label');
+label.htmlFor = 'shader-select';
+label.className = 'section-label';
+label.textContent = 'Shader';
+menu.appendChild(label);
+
+const select = document.createElement('select');
+select.id = 'shader-select';
+for (const [key, optionPreset] of Object.entries(shaderPresets)) {
+  const option = document.createElement('option');
+  option.value = key;
+  option.textContent = optionPreset.title;
+  if (key === shaderKey) option.selected = true;
+  select.appendChild(option);
+}
+menu.appendChild(select);
+
+if (presetUniforms.length) {
+  const uniformSection = document.createElement('div');
+  uniformSection.className = 'uniform-fields';
+  menu.appendChild(uniformSection);
+
+  for (const cfg of presetUniforms) {
+    const field = document.createElement('div');
+    field.className = 'field';
+
+    const fieldLabel = document.createElement('label');
+    fieldLabel.className = 'field-label';
+    fieldLabel.htmlFor = `uniform-${cfg.param.toLowerCase()}`;
+    fieldLabel.textContent = cfg.label;
+    field.appendChild(fieldLabel);
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.id = `uniform-${cfg.param.toLowerCase()}`;
+    if (cfg.step !== undefined) input.step = String(cfg.step);
+    if (cfg.min !== undefined) input.min = String(cfg.min);
+    input.value = String(uniformValues[cfg.uniform]);
+    field.appendChild(input);
+
+    input.addEventListener('change', () => {
+      const num = Number(input.value.trim());
+      if (!Number.isFinite(num)) {
+        input.value = String(uniformValues[cfg.uniform]);
+        return;
+      }
+      const transformed = cfg.sanitize ? cfg.sanitize(num) : num;
+      uniformValues[cfg.uniform] = transformed;
+      input.value = String(transformed);
+
+      const nextParams = new URLSearchParams();
+      nextParams.set('shader', select.value);
+      if (selectedTextureId) {
+        nextParams.set('texture', selectedTextureId);
+      }
+      for (const uc of presetUniforms) {
+        nextParams.set(uc.param, String(uniformValues[uc.uniform]));
+      }
+      window.location.assign(`./viewer.html?${nextParams.toString()}`);
+    });
+
+    uniformSection.appendChild(field);
+  }
+}
+
+let textureSelect = null;
+if (textureUniformKey) {
+  const textureField = document.createElement('div');
+  textureField.className = 'field';
+
+  const textureLabel = document.createElement('label');
+  textureLabel.className = 'field-label';
+  textureLabel.htmlFor = 'texture-select';
+  textureLabel.textContent = 'Texture';
+  textureField.appendChild(textureLabel);
+
+  if (textureConfigs.length) {
+    textureSelect = document.createElement('select');
+    textureSelect.id = 'texture-select';
+    textureSelect.className = 'texture-select';
+    for (const cfg of textureConfigs) {
+      const option = document.createElement('option');
+      const value = textureIdFor(cfg);
+      option.value = value;
+      option.textContent = cfg.label ?? value;
+      if (value === selectedTextureId) option.selected = true;
+      textureSelect.appendChild(option);
+    }
+    textureSelect.addEventListener('change', (event) => {
+      const nextParams = new URLSearchParams();
+      nextParams.set('shader', select.value);
+      nextParams.set('texture', event.target.value);
+      for (const cfg of presetUniforms) {
+        nextParams.set(cfg.param, String(uniformValues[cfg.uniform]));
+      }
+      window.location.assign(`./viewer.html?${nextParams.toString()}`);
+    });
+    textureField.appendChild(textureSelect);
+  } else {
+    const noTextureNote = document.createElement('div');
+    noTextureNote.className = 'file-drop';
+    noTextureNote.style.cursor = 'default';
+    noTextureNote.textContent = 'No textures found in textures/ folder';
+    textureField.appendChild(noTextureNote);
+  }
+
+  const dropArea = document.createElement('div');
+  dropArea.className = 'file-drop';
+  const dropDefaultLabel = 'Drop PNG here or click to browse';
+  dropArea.textContent = dropDefaultLabel;
+  textureField.appendChild(dropArea);
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/png';
+  fileInput.className = 'file-input';
+  textureField.appendChild(fileInput);
+
+  function resetDropLabel() {
+    dropArea.textContent = dropDefaultLabel;
+  }
+
+  function setDropLabel(name) {
+    dropArea.textContent = `Using custom: ${name || 'untitled image'}`;
+  }
+
+  async function handleCustomTexture(file) {
+    if (!file) return;
+    if (file.type !== 'image/png') {
+      dropArea.textContent = 'Please drop a PNG image';
+      setTimeout(resetDropLabel, 2000);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const tex = await textureLoader.loadAsync(objectUrl);
+      if (THREE.SRGBColorSpace) {
+        tex.colorSpace = THREE.SRGBColorSpace;
+      }
+      tex.needsUpdate = true;
+      if (textureUniformKey) {
+        const previousTexture = currentTexture;
+        currentTexture = tex;
+        if (material) {
+          material.uniforms[textureUniformKey].value = tex;
+          material.uniforms[textureUniformKey].value.needsUpdate = true;
+        }
+        if (uniforms[textureUniformKey]) {
+          uniforms[textureUniformKey].value = tex;
+        } else {
+          uniforms[textureUniformKey] = { value: tex };
+        }
+        if (previousTexture && previousTexture !== tex) {
+          previousTexture.dispose();
+        }
+      }
+      selectedTextureId = null;
+      if (textureSelect) {
+        textureSelect.selectedIndex = -1;
+      }
+      setDropLabel(file.name);
+    } catch (err) {
+      console.error('Failed to load custom texture', err);
+      dropArea.textContent = 'Failed to load image';
+      setTimeout(resetDropLabel, 2000);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  dropArea.addEventListener('click', () => {
+    fileInput.click();
+  });
+
+  dropArea.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    dropArea.classList.add('dragover');
+  });
+
+  dropArea.addEventListener('dragleave', () => {
+    dropArea.classList.remove('dragover');
+  });
+
+  dropArea.addEventListener('drop', (event) => {
+    event.preventDefault();
+    dropArea.classList.remove('dragover');
+    const files = event.dataTransfer?.files;
+    if (!files || !files.length) {
+      resetDropLabel();
+      return;
+    }
+    handleCustomTexture(files[0]);
+  });
+
+  fileInput.addEventListener('change', () => {
+    const files = fileInput.files;
+    if (files && files.length) {
+      handleCustomTexture(files[0]);
+    } else {
+      resetDropLabel();
+    }
+    fileInput.value = '';
+  });
+
+  menu.appendChild(textureField);
+}
+
+if (!presetUniforms.length && !textureUniformKey) {
+  menu.classList.add('shader-menu--compact');
+}
+
+document.body.appendChild(menu);
+
+select.addEventListener('change', (event) => {
+  const nextKey = event.target.value;
+  const nextPreset = shaderPresets[nextKey] ?? shaderPresets.disc;
+  const nextParams = new URLSearchParams();
+  nextParams.set('shader', nextKey);
+  for (const cfg of (nextPreset.uniforms ?? [])) {
+    nextParams.set(cfg.param, String(cfg.default));
+  }
+  if (nextPreset.textureUniform && availableTextures.length) {
+    nextParams.set('texture', availableTextures[0].id);
+  }
+  window.location.assign(`./viewer.html?${nextParams.toString()}`);
+});
+	
+const shaderModules = import.meta.glob('./shaders/*.frag.glsl', {
+  query: '?raw',
+  import: 'default'
+});
+const shaderLoader = shaderModules[preset.path];
+const fallbackLoader = shaderModules[shaderPresets.disc.path];
+const fragmentShader = shaderLoader
+  ? await shaderLoader()
+	  : await fallbackLoader();
+
+const uniforms = {
+  uResolution: { value: new THREE.Vector2(1, 1) }
+};
+
+for (const cfg of presetUniforms) {
+  uniforms[cfg.uniform] = { value: uniformValues[cfg.uniform] };
+}
+
+if (textureUniformKey && !uniforms[textureUniformKey]) {
+  uniforms[textureUniformKey] = { value: new THREE.Texture() };
+}
+
+if (selectedTextureConfig && textureUniformKey) {
+  currentTexture = await loadTextureFromConfig(selectedTextureConfig);
+  uniforms[textureUniformKey].value = currentTexture;
+}
+
+// Update document title after parsing params to allow overrides.
+const titleOverride = params.get('title');
+document.title = titleOverride ?? preset.title;
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const quad   = new THREE.PlaneGeometry(2, 2);
+
+material = new THREE.ShaderMaterial({ vertexShader, fragmentShader, uniforms });
+const mesh     = new THREE.Mesh(quad, material);
+scene.add(mesh);
+
+function updateResolution() {
+  const db = new THREE.Vector2();
+  renderer.getDrawingBufferSize(db);
+  uniforms.uResolution.value.copy(db);
+}
+
+function onResize() {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  updateResolution();
+}
+
+window.addEventListener('resize', onResize);
+
+renderer.setAnimationLoop(() => {
+  updateResolution();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

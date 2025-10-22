@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Conformal Poincare Square</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { height: 100%; margin: 0; background: #0d0f12; }
+    #app { position: fixed; inset: 0; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164.1/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import * as THREE from "three";
+
+/* -------------------------
+   Renderer / Scene / Camera
+------------------------- */
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+document.getElementById("app").appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+/* -------------------------
+   Fullscreen Quad
+------------------------- */
+const quad = new THREE.PlaneGeometry(2, 2);
+
+/* -------------------------
+   Shaders (conformal square)
+------------------------- */
+const vertexShader = /* glsl */`
+  varying vec2 vPos;      // clip-space position in [-1,1]^2
+  void main() {
+    vPos = position.xy;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`;
+
+const fragmentShader = /* glsl */`
+#ifdef GL_ES
+precision highp float;
+#endif
+
+#ifdef GL_OES_standard_derivatives
+#extension GL_OES_standard_derivatives : enable
+#endif
+
+uniform vec2 uResolution;
+varying vec2 vPos;
+
+#define AA 1
+const float PI     = 3.14159265358979323846;
+const float SQRT2  = 1.41421356237309504880;
+
+/* ----------------- complex helpers ----------------- */
+vec2 cadd(vec2 a, vec2 b){ return a + b; }
+vec2 csub(vec2 a, vec2 b){ return a - b; }
+vec2 cmul(vec2 a, vec2 b){ return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
+vec2 cscal(vec2 a, float s){ return a * s; }
+vec2 cdiv(vec2 a, vec2 b){
+  float d = dot(b,b);
+  return vec2((a.x*b.x + a.y*b.y)/d, (a.y*b.x - a.x*b.y)/d);
+}
+float cosh1(float x){ float ex=exp(x), emx=exp(-x); return 0.5*(ex+emx); }
+float sinh1(float x){ float ex=exp(x), emx=exp(-x); return 0.5*(ex-emx); }
+vec2 ccos(vec2 z){ return vec2(cos(z.x)*cosh1(z.y), -sin(z.x)*sinh1(z.y)); }
+
+/* --------- Jacobi theta at q = e^{-pi} ------------- */
+const float q   = 0.04321391826377226;      // exp(-PI)
+const float q14 = 0.45593812776599624;      // exp(-PI/4)
+const float th2_0 = 0.9135791381561168;     // theta2(0,q)
+const float th4_0 = 0.9135791381561169;     // theta4(0,q)
+// Ke (=K(k)) is only used for reference; the v-formula below removes it.
+const float Ke    = 1.8540746773013725;     // K(k) for k = 1/sqrt(2)
+
+/* theta2(v,q) = 2 q^{1/4} sum_{n>=0} q^{n(n+1)} cos((2n+1)v) */
+vec2 theta2(vec2 v){
+  vec2 sum = vec2(0.0);
+  float r = 1.0;
+  float inc = q*q;
+  for(int n=0; n<5; ++n){
+    float k = float(2*n + 1);
+    sum += cscal(ccos(cscal(v, k)), r);
+    r   *= inc;
+    inc *= (q*q);
+  }
+  return cscal(sum, 2.0*q14);
+}
+
+/* theta4(v,q) = 1 + 2 sum_{n>=1} (-1)^n q^{n^2} cos(2 n v) */
+vec2 theta4(vec2 v){
+  vec2 sum = vec2(1.0, 0.0);
+  float qp  = q;      // q^{1^2}
+  float q2  = q*q;
+  float step= q*q*q;  // q^{2n+1}
+  float sgn = -1.0;
+  for(int n=1; n<=5; ++n){
+    sum += cscal(ccos(cscal(v, 2.0*float(n))), 2.0*sgn*qp);
+    qp   *= step;
+    step *= q2;
+    sgn  = -sgn;
+  }
+  return sum;
+}
+
+/* cn via theta functions for k = 1/sqrt(2) with input v = pi*u/(2K) */
+vec2 jacobi_cn_from_v(vec2 v){
+  vec2 num = cscal(theta2(v), th4_0);
+  vec2 den = cscal(theta4(v), th2_0);
+  return cdiv(num, den);
+}
+
+/* -------- Square -> Disk (conformal) ----
+   v = (pi/2) * ( ((1+i)/2) * z - 1 )
+   w = (1 - i)/sqrt(2) * cn(v)
+---------------------------------------------------- */
+vec2 diskFromSquare(vec2 z){
+  // z in [-1,1]^2 (square coords centered at 0)
+  vec2 v = csub(cmul(vec2(0.5, 0.5), z), vec2(1.0, 0.0)); // ((1+i)/2)z - 1
+  v = cscal(v, 0.5 * PI);                                  // multiply by pi/2
+  vec2 cn = jacobi_cn_from_v(v);
+  vec2 c  = vec2(1.0/SQRT2, -1.0/SQRT2);                   // (1 - i)/sqrt(2)
+  return cmul(c, cn);                                       // |w| < 1
+}
+
+/* -------- color palette / tiling ---------- */
+vec3 color4(int id){
+  if(id==0) return vec3(0.0, 0.0, 0.0);
+  if(id==1) return vec3(1.0, 0.0, 0.0);
+  return vec3(1.0, 0.8, 0.0);
+}
+
+void main(){
+  // clip-space position vPos in [-1,1]^2
+  // scale so the *inscribed* centered square is [-1,1]^2 in s
+  vec2 R  = uResolution;
+  vec2 ar = R / min(R.x, R.y);   // ar.x >= 1 or ar.y >= 1
+  vec2 s  = vPos * ar;           // centered coordinates
+
+  // mask to the canonical square
+  float dSquare = 1.0 - max(abs(s.x), abs(s.y));
+  float pxs = fwidth(s.x) + fwidth(s.y);
+  float gateSquare = smoothstep(0.0, 2.0*pxs, dSquare);
+
+  vec3 col = vec3(1.0);
+  if(dSquare > 0.0){
+    // conformal map square -> disk
+    vec2 z = diskFromSquare(s);
+    float r2 = dot(z,z);
+
+    if(r2 < 1.0){
+      // Cayley: disk -> UHP, zeta = i*(1+z)/(1-z)
+      vec2 num = cadd(vec2(1.0,0.0), z);
+      vec2 den = csub(vec2(1.0,0.0), z);
+      vec2 w   = cdiv(num, den);
+      vec2 zeta= vec2(-w.y, w.x);
+
+      float x = zeta.x;
+      float y = zeta.y;
+
+      // your UHP tiling
+      float eps = max(1e-12, fwidth(y));
+      int   n   = int(floor(log2(max(y, eps))));
+      int   pN  = (n & 1);
+      float cells = exp2(float(-n));
+      int   pJ  = int(mod(floor(x * cells), 3.0));
+
+      int id = (pN*pJ + (1-pN)*(2-pJ))%3;
+      col = color4(id);
+
+      // fade as y -> 0
+      float fade = smoothstep(0.0, 3.0*eps, y);
+      col = mix(vec3(1.0), col, fade);
+
+      // fade to background at square edge
+      col = mix(vec3(1.0), col, gateSquare);
+    }
+  }
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+/* -------------------------
+   Material / Mesh
+------------------------- */
+const material = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader,
+  uniforms: {
+    uResolution: { value: new THREE.Vector2(1, 1) }
+  }
+});
+const mesh = new THREE.Mesh(quad, material);
+scene.add(mesh);
+
+/* -------------------------
+   Keep uResolution in sync
+------------------------- */
+function updateResolution() {
+  const db = new THREE.Vector2();
+  renderer.getDrawingBufferSize(db);              // actual framebuffer size
+  material.uniforms.uResolution.value.copy(db);
+}
+
+/* -------------------------
+   Resize & Render
+------------------------- */
+function onResize() {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  updateResolution();
+}
+window.addEventListener("resize", onResize);
+
+updateResolution();
+
+renderer.setAnimationLoop(() => {
+  // handle live DPR changes (moving between monitors, zoom, etc.)
+  updateResolution();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

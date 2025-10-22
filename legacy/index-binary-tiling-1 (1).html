@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Poincare Disk</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { height: 100%; margin: 0; background: #0d0f12; }
+    #app { position: fixed; inset: 0; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164.1/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import * as THREE from "three";
+
+/* -------------------------
+   Renderer / Scene / Camera
+------------------------- */
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+renderer.setPixelRatio(DPR);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+document.getElementById("app").appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+/* -------------------------
+   Fullscreen Quad
+------------------------- */
+const quad = new THREE.PlaneGeometry(2, 2);
+
+/* -------------------------
+   Shaders
+------------------------- */
+const vertexShader = /* glsl */`
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`;
+
+const fragmentShader = /* glsl */`
+#ifdef GL_ES
+precision highp float;
+#endif
+
+// Derivatives for fwidth (WebGL1) — in WebGL2 they're core
+#ifdef GL_OES_standard_derivatives
+#extension GL_OES_standard_derivatives : enable
+#endif
+
+uniform vec2 uResolution;
+
+#define AA 1
+
+vec3 color4(int id){
+    if(id==0) return vec3(0.93,0.40,0.40);
+    if(id==1) return vec3(0.42,0.72,0.98);
+    if(id==2) return vec3(0.52,0.92,0.56);
+    return        vec3(0.95,0.86,0.45);
+}
+
+// Complex helpers
+vec2 cdiv(vec2 a, vec2 b){           // (a.x + i a.y) / (b.x + i b.y)
+    float d = dot(b,b);
+    return vec2( (a.x*b.x + a.y*b.y)/d, (a.y*b.x - a.x*b.y)/d );
+}
+
+void render(out vec4 O, in vec2 U){
+    vec2 R = uResolution.xy;
+    vec3 acc = vec3(0.0);
+
+#if AA>1
+    for(int a=0;a<AA;a++) for(int b=0;b<AA;b++){
+        vec2 uv = (U + vec2(a,b)/float(AA));
+        vec2 s  = (2.0*uv - R)/R.y;     // keep aspect; now s in R^2
+#else
+        vec2 s  = (2.0*U - R)/R.y;
+#endif
+
+        // Poincaré disk coordinates: z = s, unit disk is |s| < 1
+        float r2 = dot(s,s);
+
+        vec3 col = vec3(1.0); // background outside disk
+
+        if(r2 < 1.0){
+            // Cayley map from disk to upper half-plane:
+            // ζ = i * (1 + z) / (1 - z)
+            vec2 z   = s;
+            vec2 num = vec2(1.0, 0.0) + z;
+            vec2 den = vec2(1.0, 0.0) - z;
+            vec2 w   = cdiv(num, den);        // w = (1+z)/(1-z)
+            vec2 zeta= vec2(-w.y, w.x);       // multiply by i: i*w
+
+            float x = zeta.x;
+            float y = zeta.y;                 // y ≥ 0 in UHP
+
+            // --- Your UHP binary tiling ---
+            float eps = max(1e-12, fwidth(y));
+            int   n   = int(floor(log2(max(y, eps))));
+            int   pN  = (n & 1);
+
+            float cells = exp2(float(-n));
+            int   pJ  = int(mod(floor(x * cells), 2.0));
+
+            int id = (pN<<1) | pJ;
+            vec3 tcol = color4(id);
+            col = tcol;
+
+            // Aesthetic fade as y->0 boundary in UHP
+            float fade = smoothstep(0.0, 3.0*eps, y);
+            col = mix(vec3(1.0), col, fade);
+
+            // Soft edge at the disk boundary (|z| = 1)
+            float dr = 1.0 - sqrt(r2);
+            float px = fwidth(s.x) + fwidth(s.y);
+            float edge = smoothstep(0.0, 2.0*px, dr);
+            col = mix(vec3(1.0), col, edge);
+        }
+
+        acc += col;
+
+#if AA>1
+    }
+    acc /= float(AA*AA);
+#endif
+
+    O = vec4(acc, 1.0);
+}
+
+void main() {
+    vec4 outColor;
+    render(outColor, gl_FragCoord.xy);
+    gl_FragColor = outColor;
+}
+`;
+
+const material = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader,
+  uniforms: {
+    uResolution: { value: new THREE.Vector2(window.innerWidth * DPR, window.innerHeight * DPR) }
+  }
+});
+
+const mesh = new THREE.Mesh(quad, material);
+scene.add(mesh);
+
+/* -------------------------
+   Resize & Render
+------------------------- */
+function onResize() {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  material.uniforms.iResolution.value.set(window.innerWidth * DPR, window.innerHeight * DPR);
+}
+window.addEventListener("resize", onResize);
+
+renderer.setAnimationLoop(() => {
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

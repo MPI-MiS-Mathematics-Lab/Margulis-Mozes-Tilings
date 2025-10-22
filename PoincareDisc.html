@@ -4,74 +4,20 @@
   <meta charset="utf-8" />
   <title>Hyperbolic Polygon Tiling (Poincaré Disk)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    html, body { height: 100%; margin: 0; background: #0d0f12; }
-    #app { position: fixed; inset: 0; }
-  </style>
+  <meta http-equiv="refresh" content="0; url=./viewer.html?shader=disc&N=5&A=0.6" />
 </head>
 <body>
-<div id="app"></div>
-
-<script type="module">
-import * as THREE from 'three';
-import vertexShader from './shaders/common.vert.glsl?raw';
-import fragmentShader from './shaders/disc.frag.glsl?raw';
-
-/* --------------------------------
-   Renderer / Scene / Camera
---------------------------------- */
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-document.getElementById("app").appendChild(renderer.domElement);
-
-const scene  = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-
-/* --------------------------------
-   Fullscreen Quad
---------------------------------- */
-const quad = new THREE.PlaneGeometry(2, 2);
-
-/* --------------------------------
-   Material / Mesh
---------------------------------- */
-const material = new THREE.ShaderMaterial({
-  vertexShader,
-  fragmentShader,
-  uniforms: {
-    uResolution: { value: new THREE.Vector2(1, 1) },
-    uN: { value: 7 },     // <<< change N here (>=5)
-    uA: { value: 0.6 }    // <<< change a here (>0)
-  }
-});
-const mesh = new THREE.Mesh(quad, material);
-scene.add(mesh);
-
-/* --------------------------------
-   Keep uResolution in sync
---------------------------------- */
-function updateResolution() {
-  const db = new THREE.Vector2();
-  renderer.getDrawingBufferSize(db);
-  material.uniforms.uResolution.value.copy(db);
-}
-
-/* --------------------------------
-   Resize & Render
---------------------------------- */
-function onResize(){
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  updateResolution();
-}
-window.addEventListener("resize", onResize);
-
-renderer.setAnimationLoop(() => {
-  updateResolution();
-  renderer.render(scene, camera);
-});
+<script>
+  const params = new URLSearchParams({
+    shader: 'disc',
+    N: '5',
+    A: '0.6',
+    title: document.title
+  });
+  window.location.replace(`./viewer.html?${params.toString()}`);
 </script>
+<noscript>
+  JavaScript is required. Please open <a href="./viewer.html?shader=disc&amp;N=5&amp;A=0.6">viewer.html</a>.
+</noscript>
 </body>
 </html>

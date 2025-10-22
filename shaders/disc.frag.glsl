@@ -123,14 +123,17 @@ void main(){
 
     // AA outline + fill (use world-scaled distance for constant thickness)
     float px   = fwidth(dWorld);
-    float edge = 1.0 - smoothstep(0.0, 1.0*px, abs(dWorld));
+    float edge = 1.0 - smoothstep(0.0, 2.0*px, abs(dWorld));
     float fill = 1.0 - smoothstep(0.0, px, dWorld);
 
     vec3 fillCol = levelColor(k);
     col = mix(col, fillCol, fill);
     col = mix(col, vec3(1.0), max(edge, 0.0));
 
-
+    // // Disk boundary highlight (optional)
+    // float r = sqrt(r2);
+    // float be = 1.0 - smoothstep(1.0 - 2.0*fwidth(r), 1.0, r);
+    // col = mix(col, vec3(0.85), 0.6*be);
   }
 
   gl_FragColor = vec4(col, 1.0);
