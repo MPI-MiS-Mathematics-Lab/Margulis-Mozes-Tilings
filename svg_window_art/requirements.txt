@@ -1,0 +1,5 @@
+# Minimal requirements for running the notebook and rendering SVGs
+ipython>=8.0
+ipykernel>=6.0
+jupyterlab>=3.0
+svgwrite
