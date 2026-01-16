@@ -3,3 +3,12 @@ node_modules
 dist
 .vite
 .DS_Store
+
+# Generated SVG output files
+svg_window_art/*.svg
+svg_window_art/finalised/
+svg_window_art/hyperbolic_svg/
+svg_window_art/svg_images/
+
+# Generated PDFs
+*.pdf
