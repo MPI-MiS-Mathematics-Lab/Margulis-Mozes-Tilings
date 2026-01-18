@@ -341,17 +341,84 @@ class HyperbolicScene:
         pt = poincare.Point.from_euclid(disc_x, disc_y)
         return poincare.Horocycle.from_closest_point(pt)
 
-    def _build_horizontal_horocycle(self, height: float) -> poincare.Horocycle:
+    def _build_horizontal_horocycle_params(self, height: float) -> tuple:
         """
-        Build a horizontal horocycle at y = height (tangent to infinity).
+        Compute parameters for a horizontal horocycle at y = height.
 
-        In UHP, this is the horizontal line y = height.
-        The closest point to i (disc center) is (0, height).
+        Returns (d, cy, r) where:
+        - d: disc y-coordinate of point (0, height)
+        - cy: center y-coordinate of the horocycle circle
+        - r: radius of the horocycle circle
+
+        The horocycle is always tangent to (0, 1) - the image of infinity.
         """
-        # Map (0, height) to disc - this is the closest point to disc center
-        disc_x, disc_y = self._to_disc(complex(0, height))
-        pt = poincare.Point.from_euclid(disc_x, disc_y)
-        return poincare.Horocycle.from_closest_point(pt)
+        # Map (0, height) to disc
+        _, d = self._to_disc(complex(0, height))
+        # Horocycle tangent to (0, 1) passing through (0, d):
+        # Center at (0, cy), radius r = 1 - cy
+        # |d - cy| = r  =>  cy - d = 1 - cy  =>  cy = (1 + d) / 2
+        cy = (1 + d) / 2
+        r = (1 - d) / 2
+        return d, cy, r
+
+    def _render_horizontal_horocycle(self, elem: 'HorizontalHorocycleElement') -> tuple:
+        """
+        Render a horizontal horocycle with optional hyperbolic width.
+
+        For hwidth: creates two concentric horocycles and fills between them.
+        """
+        d, cy, r = self._build_horizontal_horocycle_params(elem.height)
+
+        if elem.hwidth is None:
+            # Simple circle, no hwidth
+            return (draw.Circle(0, cy, r, **elem.style),)
+
+        # With hwidth: create inner and outer horocycles
+        # The "radial" hyperbolic distance from disc center to point (0, d)
+        # h_dist = 2 * atanh(|d|), but we need signed distance
+        # For points with d > 0: closer to top (infinity)
+        # For points with d < 0: closer to bottom
+
+        hwidth = float(elem.hwidth)
+
+        # Hyperbolic distance from origin to the horocycle (at closest point)
+        # The closest point on the horocycle to origin is at (0, d)
+        # But we need the distance along the geodesic toward infinity
+        # Actually, for horocycles, we measure distance perpendicular to the horocycle
+
+        # Simpler approach: offset the horocycle by adjusting d
+        # Inner horocycle: passes through point closer to infinity
+        # Outer horocycle: passes through point farther from infinity
+
+        # Convert d to hyperbolic distance, offset, convert back
+        # h = 2 * atanh(d) for d in (-1, 1)
+        # But atanh is only defined for |d| < 1
+
+        # For horizontal horocycles, hyperbolic distance from y=1 to y=h in UHP is log(h)
+        # So we can offset by hwidth/2 in this log scale
+        h = elem.height
+        h_inner = h * math.exp(hwidth / 2)
+        h_outer = h * math.exp(-hwidth / 2)
+
+        _, cy_inner, r_inner = self._build_horizontal_horocycle_params(h_inner)
+        _, cy_outer, r_outer = self._build_horizontal_horocycle_params(h_outer)
+
+        # Create path that goes around outer circle, then inner circle (reversed)
+        path = draw.Path(**elem.style)
+
+        # Outer circle (counterclockwise)
+        path.M(r_outer, cy_outer)
+        path.A(r_outer, r_outer, 0, True, True, -r_outer, cy_outer)
+        path.A(r_outer, r_outer, 0, True, True, r_outer, cy_outer)
+
+        # Inner circle (clockwise to create hole)
+        path.M(r_inner, cy_inner)
+        path.A(r_inner, r_inner, 0, True, False, -r_inner, cy_inner)
+        path.A(r_inner, r_inner, 0, True, False, r_inner, cy_inner)
+
+        path.Z()
+
+        return (path,)
 
     def _build_ray(self, start: complex, toward_ideal: Union[float, complex]) -> poincare.Line:
         """Build a geodesic ray from start toward an ideal point."""
@@ -440,8 +507,7 @@ class HyperbolicScene:
             return horo.to_drawables(hwidth=elem.hwidth, **elem.style)
 
         elif isinstance(elem, HorizontalHorocycleElement):
-            horo = self._build_horizontal_horocycle(elem.height)
-            return horo.to_drawables(hwidth=elem.hwidth, **elem.style)
+            return self._render_horizontal_horocycle(elem)
 
         elif isinstance(elem, RayElement):
             ray = self._build_ray(elem.start, elem.toward_ideal)
