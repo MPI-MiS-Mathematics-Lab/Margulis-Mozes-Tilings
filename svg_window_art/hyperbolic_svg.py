@@ -670,6 +670,322 @@ class HyperbolicScene:
         d.append(g)
         return d
 
+    def render_uhp(self, width: float = 400, height: float = 400,
+                   x_min: float = -5, x_max: float = 5,
+                   y_min: float = 0.1, y_max: float = 10,
+                   background: Optional[str] = None,
+                   boundary: bool = True,
+                   boundary_style: Optional[dict] = None,
+                   log_scale: bool = True) -> draw.Drawing:
+        """
+        Render the scene to an SVG Drawing in Upper Half-Plane model.
+
+        Args:
+            width, height: SVG dimensions in pixels
+            x_min, x_max: horizontal extent of viewport
+            y_min, y_max: vertical extent of viewport (y > 0)
+            background: Background color (e.g., 'white')
+            boundary: If True, draw the real axis (boundary)
+            boundary_style: Styling for boundary line
+            log_scale: If True, use logarithmic y-axis (recommended for self-similar tilings)
+        """
+        d = draw.Drawing(width, height)
+        d.set_pixel_scale(1)
+
+        if log_scale:
+            # Transform: x stays same, y -> log(y)
+            # Viewport in log space
+            log_y_min = math.log(y_min)
+            log_y_max = math.log(y_max)
+            d.view_box = (x_min, log_y_min, x_max - x_min, log_y_max - log_y_min)
+        else:
+            d.view_box = (x_min, y_min, x_max - x_min, y_max - y_min)
+
+        # Flip y-axis so y increases upward
+        g = draw.Group(transform=f'translate(0, {d.view_box[1] + d.view_box[3]}) scale(1, -1)')
+
+        if background:
+            g.append(draw.Rectangle(d.view_box[0], d.view_box[1],
+                                    d.view_box[2], d.view_box[3], fill=background))
+
+        # Clip to viewport
+        clip = draw.ClipPath(id='uhp-clip')
+        clip.append(draw.Rectangle(d.view_box[0], d.view_box[1],
+                                   d.view_box[2], d.view_box[3]))
+        d.append(clip)
+
+        content = draw.Group(clip_path='url(#uhp-clip)')
+
+        if boundary:
+            # Draw real axis (y = 0 line, or log(y) = -inf, so at bottom of viewport)
+            bstyle = boundary_style or {'stroke': 'gray', 'stroke_width': 0.02, 'fill': 'none'}
+            if log_scale:
+                content.append(draw.Line(x_min, log_y_min, x_max, log_y_min, **bstyle))
+            else:
+                content.append(draw.Line(x_min, 0, x_max, 0, **bstyle))
+
+        for elem in self.elements:
+            for drawable in self._element_to_drawables_uhp(elem, log_scale, x_min, x_max, y_min, y_max):
+                content.append(drawable)
+
+        g.append(content)
+        d.append(g)
+        return d
+
+    def _element_to_drawables_uhp(self, elem: SceneElement, log_scale: bool,
+                                   x_min: float, x_max: float,
+                                   y_min: float, y_max: float) -> tuple:
+        """Convert a scene element to drawable objects in UHP coordinates."""
+
+        if isinstance(elem, HorizontalHorocycleElement):
+            return self._render_horizontal_horocycle_uhp(elem, log_scale, x_min, x_max)
+
+        elif isinstance(elem, HorocycleTileElement):
+            return self._render_horocycle_tile_uhp(elem, log_scale)
+
+        elif isinstance(elem, RayElement):
+            return self._render_ray_uhp(elem, log_scale, y_min, y_max)
+
+        elif isinstance(elem, PointElement):
+            return self._render_point_uhp(elem, log_scale)
+
+        elif isinstance(elem, SegmentElement):
+            return self._render_segment_uhp(elem, log_scale)
+
+        elif isinstance(elem, PolygonElement):
+            return self._render_polygon_uhp(elem, log_scale)
+
+        else:
+            # Skip unsupported elements in UHP view
+            return ()
+
+    def _render_horizontal_horocycle_uhp(self, elem: 'HorizontalHorocycleElement',
+                                          log_scale: bool, x_min: float, x_max: float) -> tuple:
+        """Render horizontal horocycle in UHP (horizontal strip)."""
+        h = elem.height
+
+        if elem.hwidth is None:
+            # Simple line
+            if log_scale:
+                y = math.log(h)
+                return (draw.Line(x_min, y, x_max, y, **elem.style),)
+            else:
+                return (draw.Line(x_min, h, x_max, h, **elem.style),)
+
+        # With hwidth: horizontal strip
+        hwidth = float(elem.hwidth)
+        h_top = h * math.exp(hwidth / 2)
+        h_bottom = h * math.exp(-hwidth / 2)
+
+        if log_scale:
+            y_top = math.log(h_top)
+            y_bottom = math.log(h_bottom)
+            rect = draw.Rectangle(x_min, y_bottom, x_max - x_min, y_top - y_bottom, **elem.style)
+        else:
+            rect = draw.Rectangle(x_min, h_bottom, x_max - x_min, h_top - h_bottom, **elem.style)
+
+        return (rect,)
+
+    def _render_horocycle_tile_uhp(self, elem: 'HorocycleTileElement', log_scale: bool) -> tuple:
+        """Render horocycle tile in UHP (rectangle)."""
+        x_left, x_right = elem.x_left, elem.x_right
+        y_bottom, y_top = elem.y_bottom, elem.y_top
+
+        if log_scale:
+            log_y_bottom = math.log(y_bottom)
+            log_y_top = math.log(y_top)
+            rect = draw.Rectangle(x_left, log_y_bottom,
+                                  x_right - x_left, log_y_top - log_y_bottom,
+                                  **elem.style)
+        else:
+            rect = draw.Rectangle(x_left, y_bottom,
+                                  x_right - x_left, y_top - y_bottom,
+                                  **elem.style)
+
+        return (rect,)
+
+    def _render_ray_uhp(self, elem: 'RayElement', log_scale: bool,
+                        y_min: float, y_max: float) -> tuple:
+        """Render ray in UHP (vertical line or wedge with hwidth)."""
+        start = elem.start
+        x0 = start.real
+        y0 = start.imag
+
+        # Ray goes from start toward ideal point (on real axis or infinity)
+        if elem.toward_ideal == float('inf'):
+            # Ray going up (toward infinity)
+            x_end = x0
+            y_end = y_max * 2  # extend beyond viewport
+        else:
+            # Ray going down toward ideal point on real axis
+            x_end = float(elem.toward_ideal.real if isinstance(elem.toward_ideal, complex) else elem.toward_ideal)
+            y_end = y_min / 2  # extend beyond viewport
+
+        if elem.hwidth is None:
+            # Simple line
+            if log_scale:
+                return (draw.Line(x0, math.log(y0), x_end, math.log(max(y_end, 1e-10)), **elem.style),)
+            else:
+                return (draw.Line(x0, y0, x_end, y_end, **elem.style),)
+
+        # With hwidth: wedge shape
+        # For vertical geodesic at x = x0, hyperbolic width w at height y
+        # corresponds to Euclidean width w * y
+        hwidth = float(elem.hwidth)
+        half_w = hwidth / 2
+
+        if elem.toward_ideal == float('inf'):
+            # Wedge going up - gets wider
+            if log_scale:
+                # In log scale, the wedge edges are curves, but approximate with polygon
+                path = draw.Path(**elem.style)
+                y_start = y0
+                y_stop = y_max * 2
+                # Sample points along the wedge
+                n_points = 50
+                for i in range(n_points + 1):
+                    t = i / n_points
+                    y = y_start * ((y_stop / y_start) ** t)
+                    x_offset = half_w * y
+                    log_y = math.log(y)
+                    if i == 0:
+                        path.M(x0 - x_offset, log_y)
+                    else:
+                        path.L(x0 - x_offset, log_y)
+                for i in range(n_points, -1, -1):
+                    t = i / n_points
+                    y = y_start * ((y_stop / y_start) ** t)
+                    x_offset = half_w * y
+                    log_y = math.log(y)
+                    path.L(x0 + x_offset, log_y)
+                path.Z()
+                return (path,)
+            else:
+                # Linear wedge
+                path = draw.Path(**elem.style)
+                path.M(x0 - half_w * y0, y0)
+                path.L(x0 - half_w * y_end, y_end)
+                path.L(x0 + half_w * y_end, y_end)
+                path.L(x0 + half_w * y0, y0)
+                path.Z()
+                return (path,)
+        else:
+            # Wedge going down toward ideal point - gets narrower
+            ideal_x = float(elem.toward_ideal.real if isinstance(elem.toward_ideal, complex) else elem.toward_ideal)
+
+            if log_scale:
+                path = draw.Path(**elem.style)
+                y_start = y0
+                y_stop = max(y_min / 2, 1e-6)
+                n_points = 50
+                for i in range(n_points + 1):
+                    t = i / n_points
+                    y = y_start * ((y_stop / y_start) ** t)
+                    x_offset = half_w * y
+                    log_y = math.log(max(y, 1e-10))
+                    if i == 0:
+                        path.M(x0 - x_offset, log_y)
+                    else:
+                        path.L(ideal_x - x_offset, log_y)
+                for i in range(n_points, -1, -1):
+                    t = i / n_points
+                    y = y_start * ((y_stop / y_start) ** t)
+                    x_offset = half_w * y
+                    log_y = math.log(max(y, 1e-10))
+                    path.L(ideal_x + x_offset, log_y)
+                path.Z()
+                return (path,)
+            else:
+                path = draw.Path(**elem.style)
+                path.M(x0 - half_w * y0, y0)
+                path.L(ideal_x, 0)  # converges to ideal point
+                path.L(x0 + half_w * y0, y0)
+                path.Z()
+                return (path,)
+
+    def _render_point_uhp(self, elem: 'PointElement', log_scale: bool) -> tuple:
+        """Render point in UHP."""
+        x, y = elem.z.real, elem.z.imag
+        r = elem.radius
+
+        if log_scale:
+            return (draw.Circle(x, math.log(y), r, **elem.style),)
+        else:
+            return (draw.Circle(x, y, r, **elem.style),)
+
+    def _render_segment_uhp(self, elem: 'SegmentElement', log_scale: bool) -> tuple:
+        """Render geodesic segment in UHP."""
+        z1, z2 = elem.z1, elem.z2
+        x1, y1 = z1.real, z1.imag
+        x2, y2 = z2.real, z2.imag
+
+        # In UHP, geodesics are either vertical lines or semicircles
+        if abs(x1 - x2) < 1e-10:
+            # Vertical geodesic
+            if log_scale:
+                return (draw.Line(x1, math.log(y1), x2, math.log(y2), **elem.style),)
+            else:
+                return (draw.Line(x1, y1, x2, y2, **elem.style),)
+        else:
+            # Semicircle geodesic - center on real axis
+            # Circle through (x1, y1) and (x2, y2) with center on x-axis
+            # Center: (cx, 0), radius r
+            # (x1 - cx)^2 + y1^2 = r^2
+            # (x2 - cx)^2 + y2^2 = r^2
+            # Solving: cx = ((x1^2 + y1^2) - (x2^2 + y2^2)) / (2*(x1 - x2))
+            cx = ((x1**2 + y1**2) - (x2**2 + y2**2)) / (2 * (x1 - x2))
+            r = math.sqrt((x1 - cx)**2 + y1**2)
+
+            if log_scale:
+                # Arc in log scale is complex - approximate with polyline
+                path = draw.Path(**elem.style)
+                theta1 = math.atan2(y1, x1 - cx)
+                theta2 = math.atan2(y2, x2 - cx)
+                if theta1 > theta2:
+                    theta1, theta2 = theta2, theta1
+                n_points = 30
+                for i in range(n_points + 1):
+                    theta = theta1 + (theta2 - theta1) * i / n_points
+                    x = cx + r * math.cos(theta)
+                    y = r * math.sin(theta)
+                    if y > 0:
+                        if i == 0:
+                            path.M(x, math.log(y))
+                        else:
+                            path.L(x, math.log(y))
+                return (path,)
+            else:
+                # SVG arc
+                theta1 = math.atan2(y1, x1 - cx)
+                theta2 = math.atan2(y2, x2 - cx)
+                dtheta = theta2 - theta1
+                large_arc = 0
+                sweep = 1 if dtheta > 0 else 0
+                path = draw.Path(**elem.style)
+                path.M(x1, y1)
+                path.A(r, r, 0, large_arc, sweep, x2, y2)
+                return (path,)
+
+    def _render_polygon_uhp(self, elem: 'PolygonElement', log_scale: bool) -> tuple:
+        """Render polygon in UHP (geodesic edges)."""
+        vertices = elem.vertices
+        if len(vertices) < 3:
+            return ()
+
+        # For simplicity, draw as polyline connecting vertices
+        # (This ignores the geodesic curvature - for proper rendering would need arcs)
+        path = draw.Path(**elem.style)
+        for i, v in enumerate(vertices):
+            x, y = v.real, v.imag
+            if log_scale:
+                y = math.log(y) if y > 0 else -10
+            if i == 0:
+                path.M(x, y)
+            else:
+                path.L(x, y)
+        path.Z()
+        return (path,)
+
     def _element_to_drawables(self, elem: SceneElement) -> tuple:
         """Convert a scene element to drawable objects."""
         if isinstance(elem, PointElement):
