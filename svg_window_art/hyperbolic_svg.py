@@ -135,6 +135,14 @@ class HorocycleTangentElement:
 
 
 @dataclass
+class HorizontalHorocycleElement:
+    """A horizontal horocycle at height y (tangent to infinity in UHP)."""
+    height: float
+    hwidth: Optional[float] = None
+    style: dict = field(default_factory=dict)
+
+
+@dataclass
 class RayElement:
     """A geodesic ray from a point toward an ideal point."""
     start: complex
@@ -144,7 +152,8 @@ class RayElement:
 
 
 SceneElement = Union[PointElement, SegmentElement, GeodesicElement,
-                     PolygonElement, PolylineElement, CircleElement, HorocycleTangentElement, RayElement]
+                     PolygonElement, PolylineElement, CircleElement,
+                     HorocycleTangentElement, HorizontalHorocycleElement, RayElement]
 
 
 # =============================================================================
@@ -222,6 +231,24 @@ class HyperbolicScene:
         self.elements.append(HorocycleTangentElement(
             tangent_point=tangent_point, through_point=through_point,
             hwidth=hwidth, style=style
+        ))
+        return self
+
+    def add_horizontal_horocycle(self, height: float,
+                                  hwidth: Optional[float] = None, **style) -> 'HyperbolicScene':
+        """
+        Add a horizontal horocycle at height y (tangent to infinity).
+
+        In UHP, this appears as the horizontal line y = height.
+        In the disc, it maps to a circle tangent to the top of the boundary.
+
+        Args:
+            height: The y-coordinate (must be > 0)
+        """
+        if height <= 0:
+            raise ValueError("height must be positive")
+        self.elements.append(HorizontalHorocycleElement(
+            height=height, hwidth=hwidth, style=style
         ))
         return self
 
@@ -314,6 +341,18 @@ class HyperbolicScene:
         pt = poincare.Point.from_euclid(disc_x, disc_y)
         return poincare.Horocycle.from_closest_point(pt)
 
+    def _build_horizontal_horocycle(self, height: float) -> poincare.Horocycle:
+        """
+        Build a horizontal horocycle at y = height (tangent to infinity).
+
+        In UHP, this is the horizontal line y = height.
+        The closest point to i (disc center) is (0, height).
+        """
+        # Map (0, height) to disc - this is the closest point to disc center
+        disc_x, disc_y = self._to_disc(complex(0, height))
+        pt = poincare.Point.from_euclid(disc_x, disc_y)
+        return poincare.Horocycle.from_closest_point(pt)
+
     def _build_ray(self, start: complex, toward_ideal: Union[float, complex]) -> poincare.Line:
         """Build a geodesic ray from start toward an ideal point."""
         x1, y1 = self._to_disc(start)
@@ -398,6 +437,10 @@ class HyperbolicScene:
 
         elif isinstance(elem, HorocycleTangentElement):
             horo = self._build_horocycle(elem.tangent_point, elem.through_point)
+            return horo.to_drawables(hwidth=elem.hwidth, **elem.style)
+
+        elif isinstance(elem, HorizontalHorocycleElement):
+            horo = self._build_horizontal_horocycle(elem.height)
             return horo.to_drawables(hwidth=elem.hwidth, **elem.style)
 
         elif isinstance(elem, RayElement):
