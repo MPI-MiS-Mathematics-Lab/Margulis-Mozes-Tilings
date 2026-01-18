@@ -143,6 +143,24 @@ class HorizontalHorocycleElement:
 
 
 @dataclass
+class HorocycleTileElement:
+    """
+    A quadrilateral tile with horocycle edges (top/bottom) and geodesic edges (left/right).
+
+    In UHP: a rectangle with corners at (x_left, y_bottom), (x_right, y_bottom),
+    (x_right, y_top), (x_left, y_top).
+
+    Top and bottom edges are arcs of horocycles (tangent to infinity).
+    Left and right edges are geodesic arcs (vertical lines in UHP).
+    """
+    x_left: float
+    x_right: float
+    y_bottom: float
+    y_top: float
+    style: dict = field(default_factory=dict)
+
+
+@dataclass
 class RayElement:
     """A geodesic ray from a point toward an ideal point."""
     start: complex
@@ -153,7 +171,8 @@ class RayElement:
 
 SceneElement = Union[PointElement, SegmentElement, GeodesicElement,
                      PolygonElement, PolylineElement, CircleElement,
-                     HorocycleTangentElement, HorizontalHorocycleElement, RayElement]
+                     HorocycleTangentElement, HorizontalHorocycleElement,
+                     HorocycleTileElement, RayElement]
 
 
 # =============================================================================
@@ -249,6 +268,29 @@ class HyperbolicScene:
             raise ValueError("height must be positive")
         self.elements.append(HorizontalHorocycleElement(
             height=height, hwidth=hwidth, style=style
+        ))
+        return self
+
+    def add_horocycle_tile(self, x_left: float, x_right: float,
+                           y_bottom: float, y_top: float, **style) -> 'HyperbolicScene':
+        """
+        Add a quadrilateral tile with horocycle and geodesic edges.
+
+        In UHP, this is a rectangle with:
+        - Bottom edge: horocycle arc at y = y_bottom
+        - Top edge: horocycle arc at y = y_top
+        - Left edge: geodesic (vertical) at x = x_left
+        - Right edge: geodesic (vertical) at x = x_right
+
+        Args:
+            x_left, x_right: x-coordinates of left and right edges
+            y_bottom, y_top: y-coordinates of bottom and top edges (must be > 0)
+        """
+        if y_bottom <= 0 or y_top <= 0:
+            raise ValueError("y_bottom and y_top must be positive")
+        self.elements.append(HorocycleTileElement(
+            x_left=x_left, x_right=x_right,
+            y_bottom=y_bottom, y_top=y_top, style=style
         ))
         return self
 
@@ -420,6 +462,157 @@ class HyperbolicScene:
 
         return (path,)
 
+    def _render_horocycle_tile(self, elem: 'HorocycleTileElement') -> tuple:
+        """
+        Render a quadrilateral tile with horocycle (top/bottom) and geodesic (left/right) edges.
+        """
+        x_left, x_right = elem.x_left, elem.x_right
+        y_bottom, y_top = elem.y_bottom, elem.y_top
+
+        # Get the 4 corners in disc coordinates
+        bl = self._to_disc(complex(x_left, y_bottom))   # bottom-left
+        br = self._to_disc(complex(x_right, y_bottom))  # bottom-right
+        tr = self._to_disc(complex(x_right, y_top))     # top-right
+        tl = self._to_disc(complex(x_left, y_top))      # top-left
+
+        # Get horocycle parameters for bottom and top edges
+        _, cy_bottom, r_bottom = self._build_horizontal_horocycle_params(y_bottom)
+        _, cy_top, r_top = self._build_horizontal_horocycle_params(y_top)
+
+        # Get geodesic parameters for left and right edges
+        # Vertical geodesic at x = x0 passes through (x0, 0) and infinity
+        # In disc: boundary point and (0, 1)
+        left_geodesic = self._compute_vertical_geodesic_circle(x_left)
+        right_geodesic = self._compute_vertical_geodesic_circle(x_right)
+
+        # Build the path
+        path = draw.Path(**elem.style)
+
+        # Start at bottom-left
+        path.M(bl[0], bl[1])
+
+        # Bottom edge: horocycle arc from bl to br (going right)
+        self._add_horocycle_arc(path, bl, br, cy_bottom, r_bottom)
+
+        # Right edge: geodesic arc from br to tr (going up)
+        self._add_geodesic_arc(path, br, tr, right_geodesic)
+
+        # Top edge: horocycle arc from tr to tl (going left)
+        self._add_horocycle_arc(path, tr, tl, cy_top, r_top)
+
+        # Left edge: geodesic arc from tl to bl (going down)
+        self._add_geodesic_arc(path, tl, bl, left_geodesic)
+
+        path.Z()
+
+        return (path,)
+
+    def _compute_vertical_geodesic_circle(self, x0: float) -> tuple:
+        """
+        Compute the circle parameters for a vertical geodesic at x = x0 in UHP.
+
+        Returns (cx, cy, r) for the circle in disc coordinates.
+        Returns None if the geodesic is a diameter (x0 = 0).
+        """
+        # Vertical geodesic connects (x0, 0) on real axis to infinity
+        # In disc: boundary point b and top (0, 1)
+        b = self._to_disc(complex(x0, 1e-10))  # approximate boundary point
+        top = (0.0, 1.0)
+
+        # If x0 = 0, the geodesic is a diameter (straight line)
+        if abs(x0) < 1e-10:
+            return None  # Diameter case
+
+        # Find circle through b and top, orthogonal to unit circle
+        # Circle center is at (cx, 0) for vertical geodesics through (0, 1)
+        # Actually, for geodesics through (0, 1), the center lies on the line
+        # perpendicular to the chord from b to (0, 1)
+
+        bx, by = b
+        # Midpoint of chord
+        mx, my = (bx + 0) / 2, (by + 1) / 2
+
+        # For a circle orthogonal to unit disc: cx^2 + cy^2 = 1 + r^2
+        # Circle passes through (bx, by) and (0, 1)
+        # (bx - cx)^2 + (by - cy)^2 = r^2
+        # (0 - cx)^2 + (1 - cy)^2 = r^2
+
+        # From these: bx^2 - 2*bx*cx + by^2 - 2*by*cy = -2*cx + 1 - 2*cy
+        # bx^2 + by^2 - 2*bx*cx - 2*by*cy = 1 - 2*cx - 2*cy
+        # Since (bx, by) is on unit circle: bx^2 + by^2 = 1
+        # 1 - 2*bx*cx - 2*by*cy = 1 - 2*cx - 2*cy
+        # -2*bx*cx - 2*by*cy = -2*cx - 2*cy
+        # cx*(1 - bx) + cy*(1 - by) = 0
+        # cy = -cx * (1 - bx) / (1 - by)
+
+        # Also, orthogonality: cx^2 + cy^2 = 1 + r^2
+        # And r^2 = cx^2 + (1 - cy)^2
+
+        # Let's solve: cy = -cx * (1 - bx) / (1 - by) = cx * (bx - 1) / (1 - by)
+        # r^2 = cx^2 + (1 - cy)^2
+        # cx^2 + cy^2 = 1 + r^2 = 1 + cx^2 + (1 - cy)^2
+        # cy^2 = 1 + 1 - 2*cy + cy^2
+        # 0 = 2 - 2*cy
+        # cy = 1  ... but this can't be right for all cases
+
+        # Let me use a different approach: use the library
+        line = poincare.Line.from_points(bx, by, 0, 1, segment=True)
+        shape = line.proj_shape  # This is the underlying circle/line
+
+        if hasattr(shape, 'cx'):
+            return (shape.cx, shape.cy, shape.r)
+        else:
+            return None  # It's a straight line (diameter)
+
+    def _add_horocycle_arc(self, path, p1: tuple, p2: tuple, cy: float, r: float):
+        """Add a horocycle arc from p1 to p2 on circle centered at (0, cy) with radius r."""
+        x1, y1 = p1
+        x2, y2 = p2
+
+        # Compute angles
+        theta1 = math.atan2(y1 - cy, x1)
+        theta2 = math.atan2(y2 - cy, x2)
+
+        # Determine arc direction (we want the shorter arc on the correct side)
+        # For horocycles tangent to top, we go along the bottom of the circle
+        dtheta = theta2 - theta1
+        while dtheta > math.pi:
+            dtheta -= 2 * math.pi
+        while dtheta < -math.pi:
+            dtheta += 2 * math.pi
+
+        large_arc = 1 if abs(dtheta) > math.pi else 0
+        sweep = 1 if dtheta > 0 else 0
+
+        path.A(r, r, 0, large_arc, sweep, x2, y2)
+
+    def _add_geodesic_arc(self, path, p1: tuple, p2: tuple, geodesic_circle: tuple):
+        """Add a geodesic arc from p1 to p2 along the geodesic circle."""
+        x1, y1 = p1
+        x2, y2 = p2
+
+        if geodesic_circle is None:
+            # Diameter case - straight line
+            path.L(x2, y2)
+            return
+
+        cx, cy, r = geodesic_circle
+
+        # Compute angles
+        theta1 = math.atan2(y1 - cy, x1 - cx)
+        theta2 = math.atan2(y2 - cy, x2 - cx)
+
+        dtheta = theta2 - theta1
+        while dtheta > math.pi:
+            dtheta -= 2 * math.pi
+        while dtheta < -math.pi:
+            dtheta += 2 * math.pi
+
+        large_arc = 1 if abs(dtheta) > math.pi else 0
+        sweep = 1 if dtheta > 0 else 0
+
+        path.A(r, r, 0, large_arc, sweep, x2, y2)
+
     def _build_ray(self, start: complex, toward_ideal: Union[float, complex]) -> poincare.Line:
         """Build a geodesic ray from start toward an ideal point."""
         x1, y1 = self._to_disc(start)
@@ -508,6 +701,9 @@ class HyperbolicScene:
 
         elif isinstance(elem, HorizontalHorocycleElement):
             return self._render_horizontal_horocycle(elem)
+
+        elif isinstance(elem, HorocycleTileElement):
+            return self._render_horocycle_tile(elem)
 
         elif isinstance(elem, RayElement):
             ray = self._build_ray(elem.start, elem.toward_ideal)
