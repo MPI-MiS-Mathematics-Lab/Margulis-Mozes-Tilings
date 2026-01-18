@@ -672,11 +672,11 @@ class HyperbolicScene:
 
     def render_uhp(self, width: float = 400, height: float = 400,
                    x_min: float = -5, x_max: float = 5,
-                   y_min: float = 0.1, y_max: float = 10,
+                   y_min: float = 0.01, y_max: float = 10,
                    background: Optional[str] = None,
                    boundary: bool = True,
                    boundary_style: Optional[dict] = None,
-                   log_scale: bool = True) -> draw.Drawing:
+                   log_scale: bool = False) -> draw.Drawing:
         """
         Render the scene to an SVG Drawing in Upper Half-Plane model.
 
