@@ -1,5 +1,6 @@
-# Minimal requirements for running the notebook and rendering SVGs
+# Requirements for hyperbolic tiling notebooks
 ipython>=8.0
 ipykernel>=6.0
 jupyterlab>=3.0
-svgwrite
+hyperbolic
+drawsvg
