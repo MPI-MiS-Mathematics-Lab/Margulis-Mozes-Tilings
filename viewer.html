@@ -78,6 +78,27 @@
     .shader-menu--compact {
       padding: 8px 10px;
     }
+    .shader-menu .save-button {
+      margin-top: 12px;
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(132, 193, 255, 0.4);
+      background: rgba(23, 33, 55, 0.6);
+      color: rgba(132, 193, 255, 0.95);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .shader-menu .save-button:hover {
+      background: rgba(23, 33, 55, 0.85);
+      border-color: rgba(132, 193, 255, 0.7);
+      box-shadow: 0 0 12px rgba(132, 193, 255, 0.25);
+    }
+    .shader-menu .save-button:active {
+      transform: scale(0.98);
+    }
   </style>
 </head>
 <body>
@@ -493,6 +514,47 @@ if (textureUniformKey) {
 if (!presetUniforms.length && !textureUniformKey) {
   menu.classList.add('shader-menu--compact');
 }
+
+// Add Save as PNG button
+const saveButton = document.createElement('button');
+saveButton.className = 'save-button';
+saveButton.textContent = '💾 Save as PNG';
+saveButton.addEventListener('click', () => {
+  // Render one more frame to ensure it's up to date
+  renderer.render(scene, camera);
+  
+  // Get the canvas and convert to blob
+  renderer.domElement.toBlob((blob) => {
+    if (!blob) {
+      console.error('Failed to create image blob');
+      return;
+    }
+    
+    // Create download link
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    
+    // Generate filename based on shader and parameters
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    let filename = `${shaderKey}_${timestamp}`;
+    
+    // Add uniform values to filename
+    for (const cfg of presetUniforms) {
+      const value = uniformValues[cfg.uniform];
+      filename += `_${cfg.param}${value}`;
+    }
+    
+    link.download = `${filename}.png`;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  }, 'image/png', 1.0);
+});
+menu.appendChild(saveButton);
 
 document.body.appendChild(menu);
 
