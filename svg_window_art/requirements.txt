@@ -4,3 +4,4 @@ ipykernel>=6.0
 jupyterlab>=3.0
 hyperbolic
 drawsvg
+cairosvg
