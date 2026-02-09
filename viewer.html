@@ -109,6 +109,116 @@ import * as THREE from 'three';
 import vertexShader from './shaders/common.vert.glsl?raw';
 
 const shaderPresets = {
+  horocycle4texuhp: {
+    path: './shaders/horocycleTiling4TexUhp.frag.glsl',
+    title: 'Horocycle Tiling (4 Textures, UHP)',
+    uniforms: [
+      {
+        uniform: 'uThickness',
+        param: 'T',
+        label: 'Thickness',
+        default: 0.005,
+        step: 0.001,
+        min: 0.001,
+        sanitize: (value) => Math.max(0.001, value)
+      }
+    ],
+    fixedTextures: [
+      { uniform: 'uTex1', path: './textures/tex1.png' },
+      { uniform: 'uTex2', path: './textures/tex2.png' },
+      { uniform: 'uTex3', path: './textures/tex3.png' },
+      { uniform: 'uTex4', path: './textures/tex4.png' }
+    ]
+  },
+  horocycle4tex: {
+    path: './shaders/horocycleTiling4Tex.frag.glsl',
+    title: 'Horocycle Tiling (4 Textures, Disk)',
+    uniforms: [
+      {
+        uniform: 'uThickness',
+        param: 'T',
+        label: 'Thickness',
+        default: 0.005,
+        step: 0.001,
+        min: 0.001,
+        sanitize: (value) => Math.max(0.001, value)
+      }
+    ],
+    fixedTextures: [
+      { uniform: 'uTex1', path: './textures/tex1.png' },
+      { uniform: 'uTex2', path: './textures/tex2.png' },
+      { uniform: 'uTex3', path: './textures/tex3.png' },
+      { uniform: 'uTex4', path: './textures/tex4.png' }
+    ]
+  },
+  binarycapshypthick: {
+    path: './shaders/binaryTilingWithCapsHypThick.frag.glsl',
+    title: 'N-ary Tiling with Caps (Hyp. Thickness, Disk)',
+    uniforms: [
+      {
+        uniform: 'uThickness',
+        param: 'T',
+        label: 'Thickness',
+        default: 0.04,
+        step: 0.01,
+        min: 0.001,
+        sanitize: (value) => Math.max(0.001, value)
+      },
+      {
+        uniform: 'uChildren',
+        param: 'C',
+        label: 'Children (2–4)',
+        default: 2,
+        step: 1,
+        min: 2,
+        sanitize: (value) => Math.min(4, Math.max(2, Math.round(value)))
+      }
+    ]
+  },
+  binarycapshypthickuhp: {
+    path: './shaders/binaryTilingWithCapsHypThickUhp.frag.glsl',
+    title: 'N-ary Tiling with Caps (Hyp. Thickness, UHP)',
+    uniforms: [
+      {
+        uniform: 'uThickness',
+        param: 'T',
+        label: 'Thickness',
+        default: 0.04,
+        step: 0.01,
+        min: 0.001,
+        sanitize: (value) => Math.max(0.001, value)
+      },
+      {
+        uniform: 'uChildren',
+        param: 'C',
+        label: 'Children (2–4)',
+        default: 2,
+        step: 1,
+        min: 2,
+        sanitize: (value) => Math.min(4, Math.max(2, Math.round(value)))
+      }
+    ]
+  },
+  horocycle3tex: {
+    path: './shaders/binaryTilingWithCaps3Tex.frag.glsl',
+    title: 'Horocycle Tiling (3 Textures, Disk)',
+    uniforms: [
+      {
+        uniform: 'uThickness',
+        param: 'T',
+        label: 'Thickness',
+        default: 0.005,
+        step: 0.001,
+        min: 0.001,
+        sanitize: (value) => Math.max(0.001, value)
+      }
+    ],
+    fixedTextures: [
+      { uniform: 'uTex1', path: './textures/tex1.png' },
+      { uniform: 'uTex2', path: './textures/tex2.png' },
+      { uniform: 'uTex3', path: './textures/tex3.png' }
+    ]
+  },
   disc: {
     path: './shaders/disc.frag.glsl',
     title: 'Hyperbolic Polygon Tiling (Poincaré Disk)',
@@ -248,8 +358,8 @@ const availableTextures = Object.entries(textureModules).map(([path, url]) => {
 }).sort((a, b) => a.label.localeCompare(b.label));
 
 const params = new URLSearchParams(window.location.search);
-const shaderKey = params.get('shader')?.toLowerCase() || 'disc';
-const preset = shaderPresets[shaderKey] ?? shaderPresets.disc;
+const shaderKey = params.get('shader')?.toLowerCase() || 'horocycle4texuhp';
+const preset = shaderPresets[shaderKey] ?? shaderPresets.horocycle4texuhp;
 const presetUniforms = preset.uniforms ?? [];
 const textureUniformKeyFromPreset = preset.textureUniform ?? null;
 const textureConfigs = textureUniformKeyFromPreset
@@ -560,7 +670,7 @@ document.body.appendChild(menu);
 
 select.addEventListener('change', (event) => {
   const nextKey = event.target.value;
-  const nextPreset = shaderPresets[nextKey] ?? shaderPresets.disc;
+  const nextPreset = shaderPresets[nextKey] ?? shaderPresets.horocycle4texuhp;
   const nextParams = new URLSearchParams();
   nextParams.set('shader', nextKey);
   for (const cfg of (nextPreset.uniforms ?? [])) {
@@ -577,7 +687,7 @@ const shaderModules = import.meta.glob('./shaders/*.frag.glsl', {
   import: 'default'
 });
 const shaderLoader = shaderModules[preset.path];
-const fallbackLoader = shaderModules[shaderPresets.disc.path];
+const fallbackLoader = shaderModules[shaderPresets.horocycle4texuhp.path];
 const fragmentShader = shaderLoader
   ? await shaderLoader()
 	  : await fallbackLoader();
@@ -597,6 +707,18 @@ if (textureUniformKey && !uniforms[textureUniformKey]) {
 if (selectedTextureConfig && textureUniformKey) {
   currentTexture = await loadTextureFromConfig(selectedTextureConfig);
   uniforms[textureUniformKey].value = currentTexture;
+}
+
+// Load fixed textures (multiple textures baked into the preset)
+const fixedTextures = preset.fixedTextures ?? [];
+for (const ft of fixedTextures) {
+  const resolvedUrl = textureModules[ft.path];
+  if (resolvedUrl) {
+    const tex = await textureLoader.loadAsync(resolvedUrl);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.needsUpdate = true;
+    uniforms[ft.uniform] = { value: tex };
+  }
 }
 
 // Update document title after parsing params to allow overrides.
