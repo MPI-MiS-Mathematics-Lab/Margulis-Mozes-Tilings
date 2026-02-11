@@ -29,6 +29,29 @@ vec2 toWorld(vec2 fragCoord){
   return vec2(worldX, worldY);
 }
 
+vec2 cadd(vec2 a, vec2 b){ return a + b; }
+vec2 csub(vec2 a, vec2 b){ return a - b; }
+vec2 cdiv(vec2 a, vec2 b){
+  float d = dot(b,b);
+  return vec2((a.x*b.x + a.y*b.y)/d, (a.y*b.x - a.x*b.y)/d);
+}
+
+float asinh1(float x){
+  return log(x + sqrt(x*x + 1.0));
+}
+
+float signedDistanceToGeodesic(float a, float b, vec2 z){
+  float c = 0.5*(a + b);
+  float r = 0.5*abs(b - a);
+  float dx = z.x - c;
+  return asinh1((dx*dx + z.y*z.y - r*r) / (2.0 * r * max(z.y, 1e-6)));
+}
+
+float distanceToVertical(float x0, vec2 z){
+  float dx = abs(z.x - x0);
+  return asinh1(dx / max(z.y, 1e-6));
+}
+
 void main(){
   float childF = max(uChildren, 2.0);
   float hWidth = max(uThickness, 0.001);
@@ -57,19 +80,19 @@ void main(){
     float yren = K * y;       // in [1, childF)
 
     float cell = floor(xren);
-
     float xmod = xren - cell;
     float ymod = yren;
 
-    // ── Save pre-cap state for horizontal edges ──
+    // ── Save pre-cap state for edges ──
     float yrenOrig = yren;
+    float xmodOrig = xmod;
 
     // ── N-ary cap geometry ──
     float rb2 = 1.0 + 1.0 / (4.0 * childF * childF);
     float r0  = sqrt(rb2);
 
     bool underCap = false;
-    float dCapRen = 1e10;
+    float dCapHyp = 1e10;
 
     for(int k = 0; k < 4; k++){
       if(float(k) < childF){
@@ -77,8 +100,11 @@ void main(){
         float dx = xmod - ck;
         float d2 = dx*dx + ymod*ymod;
         if(d2 < rb2) underCap = true;
-        float dk = sqrt(d2);
-        dCapRen = min(dCapRen, abs(dk - r0));
+
+        float a = ck - r0;
+        float b = ck + r0;
+        float d = abs(signedDistanceToGeodesic(a, b, vec2(xmod, ymod)));
+        dCapHyp = min(dCapHyp, d);
       }
     }
 
@@ -101,25 +127,22 @@ void main(){
     col = mix(col, tileColor, fade);
 
     // ── Hyperbolic-thickness edge lines ──
-    //
-    // Hyperbolic distance = Euclidean_renorm / yren
+    // Top edge: geodesic from (0, childF) to (1, childF) in pre-cap cell coords
+    float topR   = sqrt(0.25 + childF*childF);
+    float dTop   = abs(signedDistanceToGeodesic(0.5 - topR, 0.5 + topR, vec2(xmodOrig, yrenOrig)));
+    float pwTop  = fwidth(dTop);
+    float lineTop = 1.0 - smoothstep(hWidth - pwTop, hWidth + pwTop, dTop);
 
-    // Horizontal edges: level boundaries at yrenOrig = 1 and childF
-    float dH = min(yrenOrig - 1.0, childF - yrenOrig) / yrenOrig;
-    float pwH = fwidth(dH);
-    float lineH = 1.0 - smoothstep(hWidth - pwH, hWidth + pwH, dH);
-
-    // Vertical edges: cell walls at integer xren (post-cap)
-    float dV = min(xmod, 1.0 - xmod) / yren;
+    // Vertical edges are true geodesics x = const.
+    float dV = min(distanceToVertical(0.0, vec2(xmod, yren)), distanceToVertical(1.0, vec2(xmod, yren)));
     float pwV = fwidth(dV);
     float lineV = 1.0 - smoothstep(hWidth - pwV, hWidth + pwV, dV);
 
-    // Cap boundary edges (use pre-cap yren for conversion)
-    float dCapHyp = dCapRen / yrenOrig;
+    // Cap boundaries are geodesic circles orthogonal to the boundary.
     float pwC = fwidth(dCapHyp);
     float lineC = 1.0 - smoothstep(hWidth - pwC, hWidth + pwC, dCapHyp);
 
-    float line = max(max(lineH, lineV), lineC);
+    float line = max(max(lineTop, lineV), lineC);
     col = mix(col, vec3(0.15), line * fade);
   }
 

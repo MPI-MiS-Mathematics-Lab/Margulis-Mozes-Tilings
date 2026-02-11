@@ -99,6 +99,21 @@
     .shader-menu .save-button:active {
       transform: scale(0.98);
     }
+    .fps-counter {
+      position: fixed;
+      bottom: 12px;
+      right: 12px;
+      z-index: 10;
+      background: rgba(13, 15, 18, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 4px 10px;
+      color: rgba(233, 234, 236, 0.72);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      backdrop-filter: blur(8px);
+    }
   </style>
 </head>
 <body>
@@ -109,9 +124,9 @@ import * as THREE from 'three';
 import vertexShader from './shaders/common.vert.glsl?raw';
 
 const shaderPresets = {
-  binarycapshypthickuhpgeodesic: {
-    path: './shaders/binaryTilingWithCapsHypThickUhpGeodesic.frag.glsl',
-    title: 'N-ary Tiling with Caps (Geodesic Thickness, UHP)',
+  margulismozessdf3coloruhp: {
+    path: './shaders/margulisMozesSdf3colorUhp.frag.glsl',
+    title: 'Margulis-Mozes SDF 3-Color (UHP)',
     uniforms: [
       {
         uniform: 'uThickness',
@@ -125,11 +140,155 @@ const shaderPresets = {
       {
         uniform: 'uChildren',
         param: 'C',
-        label: 'Children (2–6)',
+        label: 'Children m (odd: 3,5,7…)',
+        default: 3,
+        step: 2,
+        min: 3,
+        sanitize: (value) => { let v = Math.max(3, Math.round(value)); return v % 2 === 0 ? v + 1 : v; }
+      },
+      {
+        uniform: 'uParam',
+        param: 'A',
+        label: 'Side parameter a',
+        default: 1.0,
+        step: 0.05,
+        min: 0.01,
+        sanitize: (value) => Math.max(0.01, value)
+      },
+      {
+        uniform: 'uZoom',
+        param: 'Z',
+        label: 'Zoom',
+        default: 1.0,
+        step: 0.1,
+        min: 0.1,
+        sanitize: (value) => Math.max(0.1, value)
+      }
+    ]
+  },
+  margulismozessdf3colordisc: {
+    path: './shaders/margulisMozesSdf3colorDisc.frag.glsl',
+    title: 'Margulis-Mozes SDF 3-Color (Disc)',
+    uniforms: [
+      {
+        uniform: 'uThickness',
+        param: 'T',
+        label: 'Thickness',
+        default: 0.04,
+        step: 0.01,
+        min: 0.001,
+        sanitize: (value) => Math.max(0.001, value)
+      },
+      {
+        uniform: 'uChildren',
+        param: 'C',
+        label: 'Children m (odd: 3,5,7…)',
+        default: 3,
+        step: 2,
+        min: 3,
+        sanitize: (value) => { let v = Math.max(3, Math.round(value)); return v % 2 === 0 ? v + 1 : v; }
+      },
+      {
+        uniform: 'uParam',
+        param: 'A',
+        label: 'Side parameter a',
+        default: 1.0,
+        step: 0.05,
+        min: 0.01,
+        sanitize: (value) => Math.max(0.01, value)
+      },
+      {
+        uniform: 'uZoom',
+        param: 'Z',
+        label: 'Zoom',
+        default: 1.0,
+        step: 0.1,
+        min: 0.1,
+        sanitize: (value) => Math.max(0.1, value)
+      }
+    ]
+  },
+  margulismozessdfuhp: {
+    path: './shaders/margulisMozesSdfUhp.frag.glsl',
+    title: 'Margulis-Mozes Thm 5 SDF (UHP)',
+    uniforms: [
+      {
+        uniform: 'uThickness',
+        param: 'T',
+        label: 'Thickness',
+        default: 0.04,
+        step: 0.01,
+        min: 0.001,
+        sanitize: (value) => Math.max(0.001, value)
+      },
+      {
+        uniform: 'uChildren',
+        param: 'C',
+        label: 'Children m (2–16)',
         default: 2,
         step: 1,
         min: 2,
-        sanitize: (value) => Math.min(6, Math.max(2, Math.round(value)))
+        sanitize: (value) => Math.min(16, Math.max(2, Math.round(value)))
+      },
+      {
+        uniform: 'uParam',
+        param: 'A',
+        label: 'Side parameter a',
+        default: 1.0,
+        step: 0.05,
+        min: 0.01,
+        sanitize: (value) => Math.max(0.01, value)
+      },
+      {
+        uniform: 'uZoom',
+        param: 'Z',
+        label: 'Zoom',
+        default: 1.0,
+        step: 0.1,
+        min: 0.1,
+        sanitize: (value) => Math.max(0.1, value)
+      }
+    ]
+  },
+  margulismozessdfdisc: {
+    path: './shaders/margulisMozesSdfDisc.frag.glsl',
+    title: 'Margulis-Mozes Thm 5 SDF (Poincaré Disc)',
+    uniforms: [
+      {
+        uniform: 'uThickness',
+        param: 'T',
+        label: 'Thickness',
+        default: 0.04,
+        step: 0.01,
+        min: 0.001,
+        sanitize: (value) => Math.max(0.001, value)
+      },
+      {
+        uniform: 'uChildren',
+        param: 'C',
+        label: 'Children m (2–16)',
+        default: 2,
+        step: 1,
+        min: 2,
+        sanitize: (value) => Math.min(16, Math.max(2, Math.round(value)))
+      },
+      {
+        uniform: 'uParam',
+        param: 'A',
+        label: 'Side parameter a',
+        default: 1.0,
+        step: 0.05,
+        min: 0.01,
+        sanitize: (value) => Math.max(0.01, value)
+      },
+      {
+        uniform: 'uZoom',
+        param: 'Z',
+        label: 'Zoom',
+        default: 1.0,
+        step: 0.1,
+        min: 0.1,
+        sanitize: (value) => Math.max(0.1, value)
       }
     ]
   },
@@ -144,104 +303,6 @@ const shaderPresets = {
     title: 'Texture Tiling (UHP)',
     uniforms: [],
     textureUniform: 'uTexture'
-  },
-  binarycapshypthick: {
-    path: './shaders/binaryTilingWithCapsHypThick.frag.glsl',
-    title: 'N-ary Tiling with Caps (Hyp. Thickness, Disk)',
-    uniforms: [
-      {
-        uniform: 'uThickness',
-        param: 'T',
-        label: 'Thickness',
-        default: 0.04,
-        step: 0.01,
-        min: 0.001,
-        sanitize: (value) => Math.max(0.001, value)
-      },
-      {
-        uniform: 'uChildren',
-        param: 'C',
-        label: 'Children (2–6)',
-        default: 2,
-        step: 1,
-        min: 2,
-        sanitize: (value) => Math.min(6, Math.max(2, Math.round(value)))
-      }
-    ]
-  },
-  binarycapshypthickuhp: {
-    path: './shaders/binaryTilingWithCapsHypThickUhp.frag.glsl',
-    title: 'N-ary Tiling with Caps (Hyp. Thickness, UHP)',
-    uniforms: [
-      {
-        uniform: 'uThickness',
-        param: 'T',
-        label: 'Thickness',
-        default: 0.04,
-        step: 0.01,
-        min: 0.001,
-        sanitize: (value) => Math.max(0.001, value)
-      },
-      {
-        uniform: 'uChildren',
-        param: 'C',
-        label: 'Children (2–6)',
-        default: 2,
-        step: 1,
-        min: 2,
-        sanitize: (value) => Math.min(6, Math.max(2, Math.round(value)))
-      }
-    ]
-  },
-  binarytilingbasicuhp: {
-    path: './shaders/binaryTilingBasicUhp.frag.glsl',
-    title: 'Binary Tiling (Basic, UHP)',
-    uniforms: []
-  },
-  binarytilingbasicuhp3tex: {
-    path: './shaders/binaryTilingBasicUhp3Tex.frag.glsl',
-    title: 'Binary Tiling (3 Textures, UHP)',
-    uniforms: [],
-    fixedTextures: [
-      { uniform: 'uTex1', path: './textures/tex1.png' },
-      { uniform: 'uTex2', path: './textures/tex2.png' },
-      { uniform: 'uTex3', path: './textures/tex3.png' }
-    ]
-  },
-  binarytilingbasicuhp3texrandom: {
-    path: './shaders/binaryTilingBasicUhp3TexRandom.frag.glsl',
-    title: 'Binary Tiling (3 Textures, UHP, Random per Tile)',
-    uniforms: [],
-    fixedTextures: [
-      { uniform: 'uTex1', path: './textures/tex1.png' },
-      { uniform: 'uTex2', path: './textures/tex2.png' },
-      { uniform: 'uTex3', path: './textures/tex3.png' }
-    ]
-  },
-  binarytilingbasicdisc: {
-    path: './shaders/binaryTilingBasicDisc.frag.glsl',
-    title: 'Binary Tiling (Basic, Disk)',
-    uniforms: []
-  },
-  binarytilingbasicdisc3tex: {
-    path: './shaders/binaryTilingBasicDisc3Tex.frag.glsl',
-    title: 'Binary Tiling (3 Textures, Disk)',
-    uniforms: [],
-    fixedTextures: [
-      { uniform: 'uTex1', path: './textures/tex1.png' },
-      { uniform: 'uTex2', path: './textures/tex2.png' },
-      { uniform: 'uTex3', path: './textures/tex3.png' }
-    ]
-  },
-  binarytilingbasicdisc3texrandom: {
-    path: './shaders/binaryTilingBasicDisc3TexRandom.frag.glsl',
-    title: 'Binary Tiling (3 Textures, Disk, Random per Tile)',
-    uniforms: [],
-    fixedTextures: [
-      { uniform: 'uTex1', path: './textures/tex1.png' },
-      { uniform: 'uTex2', path: './textures/tex2.png' },
-      { uniform: 'uTex3', path: './textures/tex3.png' }
-    ]
   },
   binarysquare: {
     path: './shaders/binarySquare.frag.glsl',
@@ -670,9 +731,26 @@ function onResize() {
 
 window.addEventListener('resize', onResize);
 
+// FPS counter
+const fpsEl = document.createElement('div');
+fpsEl.className = 'fps-counter';
+fpsEl.textContent = '-- fps';
+document.body.appendChild(fpsEl);
+
+let frameCount = 0;
+let lastFpsTime = performance.now();
+
 renderer.setAnimationLoop(() => {
   updateResolution();
   renderer.render(scene, camera);
+
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsTime >= 1000) {
+    fpsEl.textContent = `${frameCount} fps`;
+    frameCount = 0;
+    lastFpsTime = now;
+  }
 });
 </script>
 </body>

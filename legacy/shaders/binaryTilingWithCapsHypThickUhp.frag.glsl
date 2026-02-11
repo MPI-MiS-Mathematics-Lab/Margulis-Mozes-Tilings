@@ -29,8 +29,6 @@ vec2 toWorld(vec2 fragCoord){
   return vec2(worldX, worldY);
 }
 
-vec2 cadd(vec2 a, vec2 b){ return a + b; }
-vec2 csub(vec2 a, vec2 b){ return a - b; }
 vec2 cdiv(vec2 a, vec2 b){
   float d = dot(b,b);
   return vec2((a.x*b.x + a.y*b.y)/d, (a.y*b.x - a.x*b.y)/d);
@@ -40,17 +38,15 @@ float asinh1(float x){
   return log(x + sqrt(x*x + 1.0));
 }
 
+// Exact hyperbolic signed distance from z to the geodesic with ideal endpoints a and b.
 float signedDistanceToGeodesic(float a, float b, vec2 z){
-  vec2 za = csub(z, vec2(a, 0.0));
-  vec2 zb = csub(z, vec2(b, 0.0));
-  vec2 w = cdiv(za, zb);                 // (z-a)/(z-b)
-  vec2 u = cdiv(cadd(vec2(1.0, 0.0), w), csub(vec2(1.0, 0.0), w));
-  float ux = u.x;
-  float uy = max(u.y, 1e-6);
-  float d = asinh1(abs(ux) / uy);
-  return sign(ux) * d;
+  float c = 0.5*(a + b);
+  float r = 0.5*abs(b - a);
+  float dx = z.x - c;
+  return asinh1((dx*dx + z.y*z.y - r*r) / (2.0 * r * max(z.y, 1e-6)));
 }
 
+// Exact hyperbolic distance from z to the vertical geodesic x = x0.
 float distanceToVertical(float x0, vec2 z){
   float dx = abs(z.x - x0);
   return asinh1(dx / max(z.y, 1e-6));
@@ -87,8 +83,9 @@ void main(){
     float xmod = xren - cell;
     float ymod = yren;
 
-    // ── Save pre-cap state for horizontal edges ──
+    // ── Save pre-cap state for edges ──
     float yrenOrig = yren;
+    float xmodOrig = xmod;
 
     // ── N-ary cap geometry ──
     float rb2 = 1.0 + 1.0 / (4.0 * childF * childF);
@@ -104,6 +101,7 @@ void main(){
         float d2 = dx*dx + ymod*ymod;
         if(d2 < rb2) underCap = true;
 
+        // Exact geodesic distance to cap semicircle
         float a = ck - r0;
         float b = ck + r0;
         float d = abs(signedDistanceToGeodesic(a, b, vec2(xmod, ymod)));
@@ -129,22 +127,25 @@ void main(){
     float fade = smoothstep(0.0, 3.0 * eps, y);
     col = mix(col, tileColor, fade);
 
-    // ── Hyperbolic-thickness edge lines ──
-    // Horizontal edges are horocycles at y = 1 and y = childF.
-    float dH = min(abs(log(yrenOrig)), abs(log(childF / yrenOrig)));
-    float pwH = fwidth(dH);
-    float lineH = 1.0 - smoothstep(hWidth - pwH, hWidth + pwH, dH);
+    // ── Exact hyperbolic-thickness edge lines ──
 
-    // Vertical edges are true geodesics x = const.
-    float dV = min(distanceToVertical(0.0, vec2(xmod, yren)), distanceToVertical(1.0, vec2(xmod, yren)));
+    // Top edge: geodesic from (0, childF) to (1, childF) in pre-cap cell coords
+    float topR   = sqrt(0.25 + childF*childF);
+    float dTop   = abs(signedDistanceToGeodesic(0.5 - topR, 0.5 + topR, vec2(xmodOrig, yrenOrig)));
+    float pwTop  = fwidth(dTop);
+    float lineTop = 1.0 - smoothstep(hWidth - pwTop, hWidth + pwTop, dTop);
+
+    // Vertical edges: geodesics at x = 0 and x = 1 (post-cap)
+    float dV = min(distanceToVertical(0.0, vec2(xmod, yren)),
+                   distanceToVertical(1.0, vec2(xmod, yren)));
     float pwV = fwidth(dV);
     float lineV = 1.0 - smoothstep(hWidth - pwV, hWidth + pwV, dV);
 
-    // Cap boundaries are geodesic circles orthogonal to the boundary.
+    // Cap boundaries: exact geodesic distance
     float pwC = fwidth(dCapHyp);
     float lineC = 1.0 - smoothstep(hWidth - pwC, hWidth + pwC, dCapHyp);
 
-    float line = max(max(lineH, lineV), lineC);
+    float line = max(max(lineTop, lineV), lineC);
     col = mix(col, vec3(0.15), line * fade);
   }
 
