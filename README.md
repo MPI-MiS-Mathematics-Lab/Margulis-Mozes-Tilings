@@ -1,14 +1,17 @@
-# Margulis–Mozes Tilings (WebGL)
+# Margulis–Mozes Tilings
 
-Interactive hyperbolic polygon tilings rendered with Three.js and custom GLSL shaders.
+Interactive visualizations of hyperbolic aperiodic tilings, inspired by the Margulis–Mozes construction.
+
+Two visualization approaches:
+1. **WebGL shader viewer** — real-time GPU-rendered tilings (Three.js + GLSL)
+2. **SVG notebook** — precise vector tilings via Python/Jupyter
 
 ## Installation
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
-- npm (comes with Node.js)
-- Python 3.13+ (for the SVG/notebook tools)
+- [Node.js](https://nodejs.org/) (v18+)
+- Python 3.13+ (for notebooks)
 
 ### Setup
 
@@ -26,104 +29,88 @@ Interactive hyperbolic polygon tilings rendered with Three.js and custom GLSL sh
 3. **Install Python dependencies (for notebooks)**
    ```bash
    cd svg_window_art
+   python -m venv venv
+   source venv/bin/activate
    pip install -r requirements.txt
-   cd ..
    ```
 
-## Running the WebGL Viewer
-
-### Development Mode
-
-Start the development server with hot-reload:
+## WebGL Shader Viewer
 
 ```bash
 npm run dev
 ```
 
-This will:
-- Start a local development server (typically at `http://localhost:5173`)
-- Open the default viewer in your browser
-- Watch for changes and automatically reload
+Opens `viewer.html` at `http://localhost:5173/viewer.html`. The viewer provides:
 
-You can access different viewers:
-- `http://localhost:5173/viewer.html` - Main shader viewer with menu
-- `http://localhost:5173/UHP.html` - Upper Half-Plane model
-- `http://localhost:5173/PoincareDisc.html` - Poincaré Disc model
-- `http://localhost:5173/UHP4Colored.html` - 4-colored UHP tiling
+- **Shader selection** dropdown with all available tilings
+- **Parameter controls** (thickness, children count) for applicable shaders
+- **Texture selection/upload** for texture-mapped shaders
+- **Save as PNG** export
+
+URL parameters customize the view, e.g.:
+```
+viewer.html?shader=binarytilingbasicdisc3tex
+viewer.html?shader=binarycapshypthickuhpgeodesic&T=0.04&C=3
+```
+
+### Available Shaders
+
+| Key | Description |
+|-----|-------------|
+| `binarycapshypthickuhpgeodesic` | N-ary tiling with caps (geodesic thickness, UHP) |
+| `binarycapshypthick` | N-ary tiling with caps (hyp. thickness, disk) |
+| `binarycapshypthickuhp` | N-ary tiling with caps (hyp. thickness, UHP) |
+| `binarytilingbasicuhp` | Binary tiling (basic, UHP) |
+| `binarytilingbasicdisc` | Binary tiling (basic, disk) |
+| `binarytilingbasicuhp3tex` | Binary tiling (3 textures, UHP) |
+| `binarytilingbasicdisc3tex` | Binary tiling (3 textures, disk) |
+| `binarytilingbasicuhp3texrandom` | Binary tiling (3 textures, UHP, random per tile) |
+| `binarytilingbasicdisc3texrandom` | Binary tiling (3 textures, disk, random per tile) |
+| `binarytilingtexturedisc` | Texture tiling (Poincaré disk) |
+| `binarytilingtexture` | Texture tiling (UHP) |
+| `binarysquare` | Conformal Poincaré square |
 
 ### Production Build
 
-Build optimized production files:
-
 ```bash
 npm run build
-```
-
-Preview the production build:
-
-```bash
 npm run preview
 ```
 
-### Using the Shader Viewer
+## SVG Notebook
 
-The main `viewer.html` provides an interactive interface to:
-
-- **Switch shaders**: Choose from multiple hyperbolic tiling visualizations
-- **Adjust parameters**: Modify N (polygon sides) and a (scale parameter) in real-time
-- **Load textures**: Drag and drop PNG files or select from the textures folder
-- **Save images**: Click "💾 Save as PNG" to export the current visualization
-
-URL parameters can customize the view:
-```
-viewer.html?shader=uhp&N=6&a=0.8
-viewer.html?shader=binarytiling1&texture=./textures/example.png
+```bash
+cd svg_window_art
+jupyter lab
 ```
 
-## Working with Notebooks
+Open `Margulis-Mozes_hwidth.ipynb` to generate self-similar hyperbolic tilings with:
+- Horocycle scenes at multiple scale levels
+- Bump structures with geodesic segments and rays
+- Full polygon tilings with 3-coloring algorithm
+- Renderings in both Poincaré disc and upper half-plane models
 
-The `svg_window_art/` directory contains Jupyter notebooks for generating SVG tilings:
-
-1. **Start Jupyter**
-   ```bash
-   cd svg_window_art
-   jupyter lab
-   ```
-
-2. **Open a notebook** (e.g., `Marguli-Mozes_hwidth.ipynb` or `Margulis-Mozes-SVG.ipynb`)
-
-3. **Run cells** to generate SVG tilings in the `output/` directory
-
-4. **Convert to PNG**: Run the last cell in the notebook to batch-convert all SVGs to PNGs
+The notebook uses `hyperbolic_svg.py`, a wrapper around the [`hyperbolic`](https://github.com/cduck/hyperbolic) library that provides a UHP-native interface.
 
 ## Project Structure
 
 ```
-├── viewer.html           # Main interactive shader viewer
-├── UHP.html             # Upper Half-Plane standalone viewer
-├── PoincareDisc.html    # Poincaré Disc standalone viewer
-├── shaders/             # GLSL shader programs
-│   ├── *.frag.glsl      # Fragment shaders
-│   └── common.vert.glsl # Shared vertex shader
-├── textures/            # Texture files for shader mapping
-├── svg_window_art/      # Python notebooks for SVG generation
-│   ├── *.ipynb          # Jupyter notebooks
-│   ├── hyperbolic_svg.py # Helper library
-│   └── output/          # Generated SVG/PNG files
-└── legacy/              # Older standalone HTML versions
+├── viewer.html              # Main interactive shader viewer
+├── vite.config.mts          # Vite build config
+├── package.json             # JS dependencies (Three.js, Vite)
+├── shaders/                 # Active GLSL fragment shaders
+│   ├── *.frag.glsl          # Fragment shaders
+│   └── common.vert.glsl     # Shared vertex shader
+├── textures/                # Texture files for shader mapping
+├── svg_window_art/          # Python SVG generation
+│   ├── Margulis-Mozes_hwidth.ipynb  # Main notebook
+│   ├── hyperbolic_svg.py    # Hyperbolic geometry library
+│   ├── requirements.txt     # Python dependencies
+│   └── output/              # Generated SVGs/PNGs (gitignored)
+└── legacy/                  # Archived older versions
+    ├── shaders/             # Retired shader files
+    └── *.html               # Old standalone viewers
 ```
-
-## Available Shaders
-
-- **disc**: Hyperbolic Polygon Tiling (Poincaré Disk)
-- **uhp**: Hyperbolic Polygon Tiling (Upper Half-Plane)
-- **uhp4colored**: 4-colored UHP tiling
-- **binarysquare**: Conformal Poincaré Square
-- **binarytiling1/2/3**: Binary tiling variants
-- **binarycaps**: Binary tiling with caps
-- **binarytilingtexture**: Texture-mapped binary tiling
-
-Shaders live in `shaders/` and are imported via Vite `?raw` for syntax highlighting in editors.
 
 ## Contributing
 

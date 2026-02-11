@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hyperbolic Polygon Tiling (Poincaré Disk)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="refresh" content="0; url=./viewer.html?shader=disc&N=5&A=0.6" />
+</head>
+<body>
+<script>
+  const params = new URLSearchParams({
+    shader: 'disc',
+    N: '5',
+    A: '0.6',
+    title: document.title
+  });
+  window.location.replace(`./viewer.html?${params.toString()}`);
+</script>
+<noscript>
+  JavaScript is required. Please open <a href="./viewer.html?shader=disc&amp;N=5&amp;A=0.6">viewer.html</a>.
+</noscript>
+</body>
+</html>

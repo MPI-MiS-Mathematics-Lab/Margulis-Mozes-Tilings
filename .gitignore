@@ -1,14 +1,32 @@
-notes.md
-node_modules
-dist
-.vite
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.vite/
+
+# OS files
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+svg_window_art/venv/
 
 # Generated SVG output files
 svg_window_art/*.svg
 svg_window_art/finalised/
 svg_window_art/hyperbolic_svg/
 svg_window_art/svg_images/
+svg_window_art/output/
 
 # Generated PDFs
 *.pdf
+
+# IDE / tool config
+.vscode/
+svg_window_art/.claude/
+
+# Notes (kept locally, not in repo)
+notes.md

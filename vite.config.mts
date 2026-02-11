@@ -2,13 +2,12 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   server: {
-    open: '/UHP.html'
+    open: '/viewer.html'
   },
   build: {
     rollupOptions: {
       input: {
-        uhp: 'UHP.html',
-        disc: 'PoincareDisc.html'
+        viewer: 'viewer.html'
       }
     }
   }
