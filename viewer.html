@@ -304,6 +304,46 @@ const shaderPresets = {
     uniforms: [],
     textureUniform: 'uTexture'
   },
+  binarytilingbasicuhp3tex: {
+    path: './shaders/binaryTilingBasicUhp3Tex.frag.glsl',
+    title: 'Train Tracks (UHP)',
+    uniforms: [],
+    fixedTextures: [
+      { uniform: 'uTex1', path: './textures/tex1.png' },
+      { uniform: 'uTex2', path: './textures/tex2.png' },
+      { uniform: 'uTex3', path: './textures/tex3.png' }
+    ]
+  },
+  binarytilingbasicuhp3texrandom: {
+    path: './shaders/binaryTilingBasicUhp3TexRandom.frag.glsl',
+    title: 'Train Tracks, Random (UHP)',
+    uniforms: [],
+    fixedTextures: [
+      { uniform: 'uTex1', path: './textures/tex1.png' },
+      { uniform: 'uTex2', path: './textures/tex2.png' },
+      { uniform: 'uTex3', path: './textures/tex3.png' }
+    ]
+  },
+  binarytilingbasicdisc3tex: {
+    path: './shaders/binaryTilingBasicDisc3Tex.frag.glsl',
+    title: 'Train Tracks (Disk)',
+    uniforms: [],
+    fixedTextures: [
+      { uniform: 'uTex1', path: './textures/tex1.png' },
+      { uniform: 'uTex2', path: './textures/tex2.png' },
+      { uniform: 'uTex3', path: './textures/tex3.png' }
+    ]
+  },
+  binarytilingbasicdisc3texrandom: {
+    path: './shaders/binaryTilingBasicDisc3TexRandom.frag.glsl',
+    title: 'Train Tracks, Random (Disk)',
+    uniforms: [],
+    fixedTextures: [
+      { uniform: 'uTex1', path: './textures/tex1.png' },
+      { uniform: 'uTex2', path: './textures/tex2.png' },
+      { uniform: 'uTex3', path: './textures/tex3.png' }
+    ]
+  },
   binarysquare: {
     path: './shaders/binarySquare.frag.glsl',
     title: 'Conformal Poincaré Square',
