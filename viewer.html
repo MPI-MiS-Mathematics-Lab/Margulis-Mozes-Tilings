@@ -348,6 +348,77 @@ const shaderPresets = {
     path: './shaders/binarySquare.frag.glsl',
     title: 'Conformal Poincaré Square',
     uniforms: []
+  },
+  truchetbinarystrokesfixed: {
+    path: './shaders/truchetBinaryStrokesFixed.frag.glsl',
+    title: 'Truchet Binary Strokes (Fixed)',
+    uniforms: []
+  },
+  truchetbinarystrokesfixedrandom: {
+    path: './shaders/truchetBinaryStrokesFixedRandom.frag.glsl',
+    title: 'Truchet Binary Strokes (Random)',
+    uniforms: []
+  },
+  truchetbinarystrokesfixedanaglyph: {
+    path: './shaders/truchetBinaryStrokesFixedAnaglyph.frag.glsl',
+    title: 'Truchet Binary Strokes, Anaglyph (Fixed)',
+    uniforms: []
+  },
+  truchetbinarystrokesfixedanaglyphrandom: {
+    path: './shaders/truchetBinaryStrokesFixedAnaglyphRandom.frag.glsl',
+    title: 'Truchet Binary Strokes, Anaglyph (Random)',
+    uniforms: []
+  },
+  truchetternaryceltic: {
+
+    path: './shaders/truchetTernaryCeltic.frag.glsl',
+    title: 'Truchet Ternary Celtic (Fixed)',
+    uniforms: []
+  },
+  truchetternarycelticrandom: {
+    path: './shaders/truchetTernaryCelticRandom.frag.glsl',
+    title: 'Truchet Ternary Celtic (Random)',
+    uniforms: []
+  },
+  truchetternarystrokes: {
+    path: './shaders/truchetTernaryStrokes.frag.glsl',
+    title: 'Truchet Ternary Strokes (Fixed)',
+    uniforms: []
+  },
+  truchetternarystrokesrandom: {
+    path: './shaders/truchetTernaryStrokesRandom.frag.glsl',
+    title: 'Truchet Ternary Strokes (Random)',
+    uniforms: []
+  },
+  truchetternaryregions: {
+    path: './shaders/truchetTernaryRegions.frag.glsl',
+    title: 'Truchet Ternary Regions (Fixed)',
+    uniforms: []
+  },
+  truchetternaryregionsrandom: {
+    path: './shaders/truchetTernaryRegionsRandom.frag.glsl',
+    title: 'Truchet Ternary Regions (Random)',
+    uniforms: []
+  },
+  truchetternaryregionsanaglyph: {
+    path: './shaders/truchetTernaryRegionsAnaglyph.frag.glsl',
+    title: 'Truchet Ternary Regions, Anaglyph (Fixed)',
+    uniforms: []
+  },
+  truchetternaryregionsanaglyphrandom: {
+    path: './shaders/truchetTernaryRegionsAnaglyphRandom.frag.glsl',
+    title: 'Truchet Ternary Regions, Anaglyph (Random)',
+    uniforms: []
+  },
+  truchetternaryregionsriso: {
+    path: './shaders/truchetTernaryRegionsRiso.frag.glsl',
+    title: 'Truchet Ternary Regions, Riso (Fixed)',
+    uniforms: []
+  },
+  truchetternaryregionsrisorandom: {
+    path: './shaders/truchetTernaryRegionsRisoRandom.frag.glsl',
+    title: 'Truchet Ternary Regions, Riso (Random)',
+    uniforms: []
   }
 };
 
@@ -711,7 +782,8 @@ const fragmentShader = shaderLoader
 	  : await fallbackLoader();
 
 const uniforms = {
-  uResolution: { value: new THREE.Vector2(1, 1) }
+  uResolution: { value: new THREE.Vector2(1, 1) },
+  uMouse: { value: new THREE.Vector2(0, 0) }
 };
 
 for (const cfg of presetUniforms) {
@@ -767,9 +839,27 @@ function onResize() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   updateResolution();
+  const db = new THREE.Vector2();
+  renderer.getDrawingBufferSize(db);
+  uniforms.uMouse.value.set(db.x * 0.5, db.y * 0.5);
 }
 
 window.addEventListener('resize', onResize);
+
+// Initialize mouse to center of drawing buffer
+{
+  const db = new THREE.Vector2();
+  renderer.getDrawingBufferSize(db);
+  uniforms.uMouse.value.set(db.x * 0.5, db.y * 0.5);
+}
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const dpr = renderer.getPixelRatio();
+  const x = (e.clientX - rect.left) * dpr;
+  const y = (rect.height - (e.clientY - rect.top)) * dpr;
+  uniforms.uMouse.value.set(x, y);
+});
 
 // FPS counter
 const fpsEl = document.createElement('div');
