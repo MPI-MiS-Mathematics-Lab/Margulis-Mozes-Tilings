@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hyperbolic Curve Text Study</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { height: 100%; margin: 0; background: #ffffff; }
+    #app { position: fixed; inset: 0; }
+    #controls {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid rgba(20, 34, 50, 0.18);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 10px 24px rgba(20, 34, 50, 0.10);
+      backdrop-filter: blur(8px);
+      font: 500 14px/1.2 "Segoe UI", sans-serif;
+      color: #142232;
+      direction: ltr;
+      unicode-bidi: isolate;
+    }
+    #controls .control-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #controls label {
+      white-space: nowrap;
+    }
+    #controls select {
+      min-width: 230px;
+      padding: 6px 10px;
+      border: 1px solid rgba(20, 34, 50, 0.22);
+      border-radius: 8px;
+      background: #ffffff;
+      color: #142232;
+      font: inherit;
+    }
+    #compound-word-row[hidden] {
+      display: none;
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164.1/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+<div id="app"></div>
+<div id="controls">
+  <div class="control-row">
+    <label for="data-select">Text Data</label>
+    <select id="data-select"></select>
+  </div>
+  <div class="control-row">
+    <label for="compound-mode-select">Compound</label>
+    <select id="compound-mode-select">
+      <option value="none">Off</option>
+      <option value="all">All Words</option>
+      <option value="single">One Word</option>
+    </select>
+  </div>
+  <div class="control-row">
+    <label for="compound-solver-select">Solver</label>
+    <select id="compound-solver-select">
+      <option value="exact">Exact</option>
+      <option value="approx">Approx</option>
+    </select>
+  </div>
+  <div class="control-row" id="compound-word-row" hidden>
+    <label for="compound-word-select">Word</label>
+    <select id="compound-word-select"></select>
+  </div>
+</div>
+
+<script type="module">
+const searchParams = new URLSearchParams(window.location.search);
+const DEFAULT_DATA_PATH = "./data/computer-modern-outline-data.js";
+const DATA_OPTIONS = [
+  { value: "./data/blaka-ink-arabic-outline-data.js", label: "Blaka Ink Arabic" },
+  { value: "./data/blaka-ink-outline-data.js", label: "Blaka Ink" },
+  { value: "./data/computer-modern-outline-data.js", label: "Computer Modern" },
+  { value: "./data/computer-modern-bold-outline-data.js", label: "Computer Modern Bold" },
+  { value: "./data/noto-naskh-arabic-tashkeel-outline-data.js", label: "Noto Naskh Arabic Tashkeel" },
+  { value: "./data/noto-naskh-arabic-outline-data.js", label: "Noto Naskh Arabic" },
+  { value: "./data/noto-naskh-arabic-bold-outline-data.js", label: "Noto Naskh Arabic Bold" }
+];
+
+const dataSelect = document.getElementById("data-select");
+const compoundModeSelect = document.getElementById("compound-mode-select");
+const compoundSolverSelect = document.getElementById("compound-solver-select");
+const compoundWordRow = document.getElementById("compound-word-row");
+const compoundWordSelect = document.getElementById("compound-word-select");
+const requestedDataPath = searchParams.get("data");
+const dataPath = requestedDataPath || DEFAULT_DATA_PATH;
+for (const optionDef of DATA_OPTIONS) {
+  const option = document.createElement("option");
+  option.value = optionDef.value;
+  option.textContent = optionDef.label;
+  dataSelect.appendChild(option);
+}
+if (!DATA_OPTIONS.some((optionDef) => optionDef.value === dataPath)) {
+  const customOption = document.createElement("option");
+  customOption.value = dataPath;
+  customOption.textContent = `Custom: ${dataPath}`;
+  dataSelect.appendChild(customOption);
+}
+dataSelect.value = dataPath;
+dataSelect.addEventListener("change", () => {
+  const url = new URL(window.location.href);
+  url.searchParams.set("data", dataSelect.value);
+  window.location.href = url.toString();
+});
+
+function setCompoundQuery(mode, wordValue) {
+  const url = new URL(window.location.href);
+  if (mode === "all") {
+    url.searchParams.set("compoundWord", "all");
+  } else if (mode === "single" && wordValue !== "") {
+    url.searchParams.set("compoundWord", wordValue);
+  } else {
+    url.searchParams.delete("compoundWord");
+  }
+  window.location.href = url.toString();
+}
+
+function setCompoundSolverQuery(solver) {
+  const url = new URL(window.location.href);
+  if (solver === "approx") {
+    url.searchParams.set("compoundSolver", "approx");
+  } else {
+    url.searchParams.delete("compoundSolver");
+  }
+  window.location.href = url.toString();
+}
+
+await new Promise((resolve, reject) => {
+  const script = document.createElement("script");
+  script.src = dataPath;
+  script.onload = resolve;
+  script.onerror = () => reject(new Error(`Failed to load font data: ${dataPath}`));
+  document.head.appendChild(script);
+});
+
+const THREE = await import("three");
+
+const {
+  FONT_SOURCE_TEXT,
+  FONT_SOURCE_FONT,
+  FONT_DIRECTION,
+  FONT_OUTLINE_GLYPHS_RAW,
+  FONT_LAYOUT_RUN_RAW,
+  MAX_GLYPH_SEGMENTS,
+} = window;
+
+document.title = `Hyperbolic Curve Text Study - ${FONT_SOURCE_FONT}`;
+document.documentElement.lang = FONT_DIRECTION === "rtl" ? "ar" : "en";
+document.documentElement.dir = FONT_DIRECTION === "rtl" ? "rtl" : "ltr";
+
+const COMPOUND_WORD_QUERY = searchParams.get("compoundWord");
+const COMPOUND_ALL_WORDS = COMPOUND_WORD_QUERY === "all";
+const COMPOUND_SOLVER = searchParams.get("compoundSolver") === "approx" ? "approx" : "exact";
+const COMPOUND_WORD_ID =
+  COMPOUND_WORD_QUERY === null || COMPOUND_ALL_WORDS || !Number.isFinite(Number(COMPOUND_WORD_QUERY))
+    ? -1
+    : Number(COMPOUND_WORD_QUERY);
+const CURVE_CONTROL = [
+  new THREE.Vector2(-0.78, -0.22),
+  new THREE.Vector2(-0.34, 0.66),
+  new THREE.Vector2(0.30, -0.52),
+  new THREE.Vector2(0.80, 0.22)
+];
+
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(DPR);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+document.getElementById("app").appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+const quad = new THREE.PlaneGeometry(2, 2);
+
+const vertexShader = /* glsl */`
+  void main() {
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`;
+
+function cdiv(a, b) {
+  const den = b.x * b.x + b.y * b.y;
+  return new THREE.Vector2(
+    (a.x * b.x + a.y * b.y) / den,
+    (a.y * b.x - a.x * b.y) / den
+  );
+}
+
+function clampDiskPoint(a) {
+  const aa = a.x * a.x + a.y * a.y;
+  if (aa <= 0.92 * 0.92) return a.clone();
+  return a.clone().multiplyScalar(0.92 / Math.sqrt(aa));
+}
+
+function diskTranslateJS(z, a) {
+  const ac = clampDiskPoint(a);
+  const num = z.clone().add(ac);
+  const den = new THREE.Vector2(
+    1.0 + ac.x * z.x + ac.y * z.y,
+    ac.x * z.y - ac.y * z.x
+  );
+  return cdiv(num, den);
+}
+
+function diskLogOriginJS(z) {
+  const r = z.length();
+  if (r < 1e-8) return new THREE.Vector2(0, 0);
+  return z.clone().multiplyScalar((2.0 * Math.atanh(Math.min(r, 0.9995))) / r);
+}
+
+function diskExpOriginJS(u) {
+  const len = u.length();
+  if (len < 1e-8) return new THREE.Vector2(0, 0);
+  return u.clone().multiplyScalar(Math.tanh(0.5 * len) / len);
+}
+
+function diskLogAtJS(sample, anchor) {
+  return diskLogOriginJS(diskTranslateJS(sample, anchor.clone().multiplyScalar(-1)));
+}
+
+function hyperDistanceJS(a, b) {
+  return diskLogAtJS(b, a).length();
+}
+
+function geodesicMixJS(a, b, t) {
+  const rel = diskTranslateJS(b, a.clone().multiplyScalar(-1));
+  const step = diskLogOriginJS(rel).multiplyScalar(t);
+  return diskTranslateJS(diskExpOriginJS(step), a);
+}
+
+function hyperBezierPointJS(t) {
+  const a = geodesicMixJS(CURVE_CONTROL[0], CURVE_CONTROL[1], t);
+  const b = geodesicMixJS(CURVE_CONTROL[1], CURVE_CONTROL[2], t);
+  const c = geodesicMixJS(CURVE_CONTROL[2], CURVE_CONTROL[3], t);
+  const d = geodesicMixJS(a, b, t);
+  const e = geodesicMixJS(b, c, t);
+  return geodesicMixJS(d, e, t);
+}
+
+function hyperBezierTangentJS(t) {
+  const eps = 0.0015;
+  const t0 = Math.max(0, t - eps);
+  const t1 = Math.min(1, t + eps);
+  const p = hyperBezierPointJS(t);
+  const pm = hyperBezierPointJS(t0);
+  const pp = hyperBezierPointJS(t1);
+  return diskLogAtJS(pp, p).sub(diskLogAtJS(pm, p));
+}
+
+function buildArcLengthTable(steps) {
+  const ts = [0];
+  const lengths = [0];
+  let prev = hyperBezierPointJS(0);
+  let total = 0;
+
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const p = hyperBezierPointJS(t);
+    total += hyperDistanceJS(prev, p);
+    ts.push(t);
+    lengths.push(total);
+    prev = p;
+  }
+
+  return { ts, lengths, total };
+}
+
+function findTForArcLength(table, target) {
+  const { ts, lengths } = table;
+  for (let i = 1; i < lengths.length; i++) {
+    if (target <= lengths[i]) {
+      const denom = Math.max(lengths[i] - lengths[i - 1], 1e-8);
+      const f = (target - lengths[i - 1]) / denom;
+      return THREE.MathUtils.lerp(ts[i - 1], ts[i], f);
+    }
+  }
+  return 1;
+}
+
+const FONT_GLYPHS = Object.fromEntries(
+  Object.entries(FONT_OUTLINE_GLYPHS_RAW).map(([glyphKey, glyph]) => [
+    glyphKey,
+    {
+      glyphId: glyph.glyphId,
+      glyphName: glyph.glyphName,
+      sampleBounds: new THREE.Vector4(...glyph.sampleBounds),
+      segmentCount: glyph.segments.length,
+      segments: [
+        ...glyph.segments.map((seg) => new THREE.Vector4(...seg)),
+        ...Array.from({ length: MAX_GLYPH_SEGMENTS - glyph.segments.length }, () => new THREE.Vector4())
+      ]
+    }
+  ])
+);
+
+const FONT_LAYOUT_RUN = FONT_LAYOUT_RUN_RAW.map((entry) => ({
+  glyphKey: entry.glyphKey,
+  cluster: entry.cluster,
+  advanceEm: entry.advanceEm,
+  xOffsetEm: entry.xOffsetEm,
+  yOffsetEm: entry.yOffsetEm
+}));
+
+function glyphInfoForKey(glyphKey) {
+  return FONT_GLYPHS[glyphKey];
+}
+
+function assertRunCoverage(run) {
+  const missing = [...new Set(run.map((entry) => entry.glyphKey).filter((glyphKey) => !glyphInfoForKey(glyphKey)))];
+  if (missing.length === 0) return;
+  const missingList = missing.map((glyphKey) => JSON.stringify(glyphKey)).join(", ");
+  throw new Error(
+    `Missing outline data for shaped glyphs: ${missingList}. ` +
+    "Regenerate the selected data file with scripts/extract_outline_data.py."
+  );
+}
+
+function buildClusterWordIds(text) {
+  const wordIds = Array.from({ length: text.length }, () => -1);
+  let wordId = -1;
+  for (let i = 0; i < text.length; i++) {
+    if (/\s/.test(text[i])) continue;
+    if (i === 0 || /\s/.test(text[i - 1])) wordId += 1;
+    wordIds[i] = wordId;
+  }
+  return wordIds;
+}
+
+function extractWordTokens(text) {
+  return text.match(/\S+/g) || [];
+}
+
+function buildPlacedRun(run) {
+  const table = buildArcLengthTable(640);
+  const marginH = 0.34;
+  assertRunCoverage(run);
+  const clusterWordIds = buildClusterWordIds(FONT_SOURCE_TEXT);
+
+  const totalAdvanceEm = run.reduce((sum, entry) => sum + entry.advanceEm, 0.0);
+  const availableH = Math.max(table.total - 2.0 * marginH, 0.6);
+  const scaleH = availableH / Math.max(totalAdvanceEm, 1e-5);
+  const entries = [];
+  let penH = marginH;
+
+  run.forEach((entry) => {
+    const info = glyphInfoForKey(entry.glyphKey);
+    const penPointH = penH;
+    const advanceH = entry.advanceEm * scaleH;
+    entries.push({
+      ...entry,
+      info,
+      penPointH,
+      advanceH,
+      wordId: clusterWordIds[entry.cluster] ?? -1
+    });
+    penH += advanceH;
+  });
+
+  return { table, scaleH, entries };
+}
+
+function buildSentenceGlyphs(placedRun, skipWordIds = new Set()) {
+  const glyphs = [];
+  for (const entry of placedRun.entries) {
+    if (skipWordIds.has(entry.wordId) && entry.advanceEm > 0.0) continue;
+    const info = entry.info;
+    const t = findTForArcLength(placedRun.table, entry.penPointH);
+    const base = hyperBezierPointJS(t);
+    const baseTangent = hyperBezierTangentJS(t);
+    if (baseTangent.lengthSq() <= 1e-10 || info.segmentCount <= 0) continue;
+    baseTangent.normalize();
+    const baseNormal = new THREE.Vector2(-baseTangent.y, baseTangent.x);
+    glyphs.push({
+      glyphKey: entry.glyphKey,
+      cluster: entry.cluster,
+      anchor: base,
+      tangent: baseTangent,
+      normal: baseNormal,
+      offset: new THREE.Vector2(entry.xOffsetEm, entry.yOffsetEm),
+      sampleBounds: info.sampleBounds,
+      segments: info.segments,
+      segmentCount: info.segmentCount,
+      scaleH: placedRun.scaleH
+    });
+  }
+  return { glyphs, scaleH: placedRun.scaleH };
+}
+
+function buildCompoundWord(placedRun, wordId) {
+  if (wordId < 0) return null;
+  const wordEntries = placedRun.entries.filter((entry) => entry.wordId === wordId && entry.advanceEm > 0.0);
+  if (wordEntries.length === 0) return null;
+
+  const wordStartH = Math.min(...wordEntries.map((entry) => entry.penPointH));
+  const wordEndH = Math.max(...wordEntries.map((entry) => entry.penPointH + entry.advanceH));
+  const scaleH = placedRun.scaleH;
+
+  const segments = [];
+  const glyphBoxes = [];
+  const glyphSegmentMeta = [];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const entry of wordEntries) {
+    const segmentStart = segments.length;
+    const tx = (entry.penPointH - wordStartH) / scaleH + entry.xOffsetEm;
+    const ty = entry.yOffsetEm;
+    const glyphBox = new THREE.Vector4(
+      entry.info.sampleBounds.x + tx,
+      entry.info.sampleBounds.y + ty,
+      entry.info.sampleBounds.z + tx,
+      entry.info.sampleBounds.w + ty
+    );
+    glyphBoxes.push(glyphBox);
+    minX = Math.min(minX, glyphBox.x);
+    minY = Math.min(minY, glyphBox.y);
+    maxX = Math.max(maxX, glyphBox.z);
+    maxY = Math.max(maxY, glyphBox.w);
+    for (let i = 0; i < entry.info.segmentCount; i++) {
+      const seg = entry.info.segments[i];
+      segments.push(new THREE.Vector4(seg.x + tx, seg.y + ty, seg.z + tx, seg.w + ty));
+    }
+    glyphSegmentMeta.push(new THREE.Vector2(segmentStart, entry.info.segmentCount));
+  }
+  if (segments.length === 0) return null;
+
+  const wordWidthEm = Math.max((wordEndH - wordStartH) / Math.max(scaleH, 1e-5), 0.0);
+  const sampleCount = Math.max(16, Math.min(32, Math.ceil(wordWidthEm * 6.0)));
+  const stripSamples = [];
+  for (let i = 0; i < sampleCount; i++) {
+    const f = sampleCount === 1 ? 0.5 : i / (sampleCount - 1);
+    const sampleH = THREE.MathUtils.lerp(wordStartH, wordEndH, f);
+    const t = findTForArcLength(placedRun.table, sampleH);
+    const anchor = hyperBezierPointJS(t);
+    const tangent = hyperBezierTangentJS(t);
+    if (tangent.lengthSq() <= 1e-10) continue;
+    tangent.normalize();
+    const angle = Math.atan2(tangent.y, tangent.x);
+    stripSamples.push(new THREE.Vector4(anchor.x, anchor.y, (sampleH - wordStartH) / scaleH, angle));
+  }
+  if (stripSamples.length === 0) return null;
+  const stripRanges = stripSamples.map((sample, i) => {
+    const prevBase = i > 0 ? stripSamples[i - 1].z : minX - 0.18;
+    const nextBase = i + 1 < stripSamples.length ? stripSamples[i + 1].z : maxX + 0.18;
+    return new THREE.Vector2(
+      i > 0 ? 0.5 * (prevBase + sample.z) : prevBase,
+      i + 1 < stripSamples.length ? 0.5 * (sample.z + nextBase) : nextBase
+    );
+  });
+
+  return {
+    wordId,
+    scaleH,
+    sampleBounds: new THREE.Vector4(minX, minY, maxX, maxY),
+    segmentCount: segments.length,
+    segments,
+    glyphBoxes,
+    glyphSegmentMeta,
+    stripSamples,
+    stripRanges
+  };
+}
+
+const placedRun = buildPlacedRun(FONT_LAYOUT_RUN);
+const availableWordIds = [...new Set(placedRun.entries.map((entry) => entry.wordId).filter((wordId) => wordId >= 0))];
+const wordTokens = extractWordTokens(FONT_SOURCE_TEXT);
+
+for (const wordId of availableWordIds) {
+  const option = document.createElement("option");
+  option.value = String(wordId);
+  const wordLabel = wordTokens[wordId] || `Word ${wordId + 1}`;
+  option.textContent = `${wordId + 1}: ${wordLabel}`;
+  compoundWordSelect.appendChild(option);
+}
+
+function syncCompoundControls() {
+  const hasWords = availableWordIds.length > 0;
+  compoundModeSelect.disabled = !hasWords;
+  const wantsSingle = !COMPOUND_ALL_WORDS && COMPOUND_WORD_ID >= 0 && availableWordIds.includes(COMPOUND_WORD_ID);
+  compoundModeSelect.value = COMPOUND_ALL_WORDS ? "all" : (wantsSingle ? "single" : "none");
+  compoundSolverSelect.value = COMPOUND_SOLVER;
+  const fallbackWordId = wantsSingle ? COMPOUND_WORD_ID : (availableWordIds[0] ?? -1);
+  if (fallbackWordId >= 0) {
+    compoundWordSelect.value = String(fallbackWordId);
+  }
+  const showWordSelector = hasWords && compoundModeSelect.value === "single";
+  const compoundActive = hasWords && compoundModeSelect.value !== "none";
+  compoundWordRow.hidden = !showWordSelector;
+  compoundWordSelect.disabled = !showWordSelector;
+  compoundSolverSelect.disabled = !compoundActive;
+}
+
+compoundModeSelect.addEventListener("change", () => {
+  if (compoundModeSelect.value === "single") {
+    const wordValue = compoundWordSelect.value || String(availableWordIds[0] ?? "");
+    setCompoundQuery("single", wordValue);
+    return;
+  }
+  setCompoundQuery(compoundModeSelect.value, "");
+});
+
+compoundWordSelect.addEventListener("change", () => {
+  if (compoundModeSelect.value !== "single") return;
+  setCompoundQuery("single", compoundWordSelect.value);
+});
+
+compoundSolverSelect.addEventListener("change", () => {
+  setCompoundSolverQuery(compoundSolverSelect.value);
+});
+
+syncCompoundControls();
+
+const requestedCompoundWordIds = COMPOUND_ALL_WORDS
+  ? availableWordIds
+  : (COMPOUND_WORD_ID >= 0 ? [COMPOUND_WORD_ID] : []);
+const requestedCompoundWordLayouts = requestedCompoundWordIds
+  .map((wordId) => buildCompoundWord(placedRun, wordId))
+  .filter(Boolean);
+const compoundUniformBudget = Math.max(0, renderer.capabilities.maxFragmentUniforms - 24);
+const compoundWordLayouts = requestedCompoundWordLayouts.filter((layout) => {
+  const stripUniformVectors = COMPOUND_SOLVER === "approx" ? 2 * layout.stripSamples.length : layout.stripSamples.length;
+  const estimatedVectors = 5 + stripUniformVectors + layout.segmentCount + (2 * layout.glyphBoxes.length);
+  return estimatedVectors <= compoundUniformBudget;
+});
+if (compoundWordLayouts.length < requestedCompoundWordLayouts.length) {
+  const skipped = requestedCompoundWordLayouts
+    .filter((layout) => !compoundWordLayouts.includes(layout))
+    .map((layout) => layout.wordId);
+  console.warn(
+    "Skipping compound render for words that exceed fragment uniform budget:",
+    skipped,
+    "budget",
+    compoundUniformBudget
+  );
+}
+const compoundSkipWordIds = new Set(compoundWordLayouts.map((layout) => layout.wordId));
+const sentenceLayout = buildSentenceGlyphs(placedRun, compoundSkipWordIds);
+
+const baseFragmentShader = /* glsl */`
+#ifdef GL_OES_standard_derivatives
+#extension GL_OES_standard_derivatives : enable
+#endif
+
+#ifdef GL_ES
+precision highp float;
+#endif
+
+uniform vec2 uResolution;
+
+void main() {
+  vec2 R = uResolution.xy;
+  vec2 s = (2.0 * gl_FragCoord.xy - R) / R.y;
+  float r = length(s);
+  float aa = max(fwidth(r), 1.0 / R.y);
+  float ring = 1.0 - smoothstep(0.0, 1.5 * aa, abs(r - 1.0));
+  vec3 col = mix(vec3(1.0), vec3(0.0), ring);
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+const glyphFragmentShader = /* glsl */`
+#ifdef GL_OES_standard_derivatives
+#extension GL_OES_standard_derivatives : enable
+#endif
+
+#ifdef GL_ES
+precision highp float;
+#endif
+
+uniform vec2 uResolution;
+uniform vec2 uPan;
+uniform vec2 uAnchor;
+uniform vec2 uTangent;
+uniform vec2 uNormal;
+uniform vec2 uGlyphOffset;
+uniform float uScaleH;
+uniform vec4 uSampleBounds;
+uniform float uSegmentCount;
+uniform vec4 uSegments[${MAX_GLYPH_SEGMENTS}];
+uniform vec3 uColor;
+
+vec2 cdiv(vec2 a, vec2 b) {
+  float den = dot(b, b);
+  return vec2((a.x*b.x + a.y*b.y)/den, (a.y*b.x - a.x*b.y)/den);
+}
+
+vec2 diskTranslate(vec2 z, vec2 a) {
+  float aa = dot(a, a);
+  if (aa < 1e-8) return z;
+  if (aa > 0.92*0.92) a *= 0.92 / sqrt(aa);
+  vec2 num = z + a;
+  vec2 den = vec2(1.0 + a.x*z.x + a.y*z.y, a.x*z.y - a.y*z.x);
+  return cdiv(num, den);
+}
+
+float atanhApprox(float x) {
+  float xc = clamp(x, -0.9995, 0.9995);
+  return 0.5 * log((1.0 + xc) / max(1.0 - xc, 1e-6));
+}
+
+float sdSegment(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a;
+  vec2 ba = b - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+
+vec2 diskLogOrigin(vec2 z) {
+  float r = length(z);
+  if (r < 1e-6) return vec2(0.0);
+  return z * (2.0 * atanhApprox(r) / r);
+}
+
+vec2 diskLogMap(vec2 p, vec2 anchor) {
+  vec2 w = diskTranslate(p, -anchor);
+  return diskLogOrigin(w);
+}
+
+void main() {
+  vec2 R = uResolution.xy;
+  vec2 s0 = (2.0 * gl_FragCoord.xy - R) / R.y;
+  vec2 s = diskTranslate(s0, -uPan);
+  if (dot(s, s) >= 0.9995) discard;
+
+  vec2 local = diskLogMap(s, uAnchor);
+  vec2 q = vec2(dot(local, uTangent), dot(local, uNormal)) / max(uScaleH, 1e-5) - uGlyphOffset;
+
+  vec2 sampleMin = uSampleBounds.xy;
+  vec2 sampleMax = uSampleBounds.zw;
+  if (q.x < sampleMin.x - 0.05 || q.x > sampleMax.x + 0.05 || q.y < sampleMin.y - 0.05 || q.y > sampleMax.y + 0.05) discard;
+
+  float dist = 1e9;
+  float winding = 0.0;
+  for (int i = 0; i < ${MAX_GLYPH_SEGMENTS}; i++) {
+    if (float(i) >= uSegmentCount) break;
+    vec2 a = uSegments[i].xy;
+    vec2 b = uSegments[i].zw;
+    dist = min(dist, sdSegment(q, a, b));
+
+    bool upCross = (a.y <= q.y) && (b.y > q.y);
+    bool downCross = (a.y > q.y) && (b.y <= q.y);
+    if (upCross || downCross) {
+      float x = a.x + (q.y - a.y) * (b.x - a.x) / (b.y - a.y);
+      if (x > q.x) winding += upCross ? 1.0 : -1.0;
+    }
+  }
+  if (abs(winding) > 0.5) dist = -dist;
+  float aa = max(0.004, 0.75 * length(fwidth(q)));
+  float glyphAlpha = 1.0 - smoothstep(-aa, aa, dist);
+
+  vec3 rgb = uColor * glyphAlpha;
+  if (glyphAlpha < 0.01) discard;
+  gl_FragColor = vec4(rgb, glyphAlpha);
+}
+`;
+
+function makeCompoundWordFragmentShader(stripSampleCount, segmentCount, glyphCount, solverMode) {
+  const stripRangeUniform = solverMode === "approx"
+    ? `uniform vec2 uStripRanges[${stripSampleCount}];`
+    : "";
+  const wordCoordFunctions = solverMode === "approx" ? /* glsl */`
+vec3 sampleWordCoords(vec2 s, vec4 stripSample, vec2 range) {
+  vec2 anchor = stripSample.xy;
+  float base = stripSample.z;
+  float angle = stripSample.w;
+  vec2 tangent = vec2(cos(angle), sin(angle));
+  vec2 normal = vec2(-tangent.y, tangent.x);
+  vec2 local = diskLogMap(s, anchor);
+  vec2 q = vec2(base + dot(local, tangent) / max(uScaleH, 1e-5), dot(local, normal) / max(uScaleH, 1e-5));
+  float rangeSlack = max(max(range.x - q.x, q.x - range.y), 0.0);
+  float score = dot(local, local) / max(uScaleH * uScaleH, 1e-5) + 12.0 * rangeSlack * rangeSlack;
+  return vec3(q, score);
+}
+
+vec3 wordCoords(vec2 s) {
+  float bestScore = 1e9;
+  vec2 bestQ = vec2(0.0);
+  float bestNormal = 1e9;
+  for (int i = 0; i < ${stripSampleCount}; i++) {
+    vec3 candidate = sampleWordCoords(s, uStripSamples[i], uStripRanges[i]);
+    if (candidate.z < bestScore) {
+      bestScore = candidate.z;
+      bestQ = candidate.xy;
+      bestNormal = abs(candidate.y);
+    }
+  }
+  return vec3(bestQ, bestNormal);
+}
+` : /* glsl */`
+vec3 segmentWordCoords(vec2 s, vec4 sample0, vec4 sample1) {
+  vec2 anchor0 = sample0.xy;
+  vec2 anchor1 = sample1.xy;
+  float base0 = sample0.z;
+  float base1 = sample1.z;
+  vec2 rel01 = diskLogMap(anchor1, anchor0);
+  float relLen2 = max(dot(rel01, rel01), 1e-6);
+  vec2 local0 = diskLogMap(s, anchor0);
+  float bestLambda = clamp(dot(local0, rel01) / relLen2, 0.0, 1.0);
+  float bestScore = 1e9;
+  float radius = 0.25;
+
+  for (int iter = 0; iter < 4; iter++) {
+    float lambdaA = clamp(bestLambda - radius, 0.0, 1.0);
+    float lambdaB = bestLambda;
+    float lambdaC = clamp(bestLambda + radius, 0.0, 1.0);
+
+    vec2 footA = geodesicPoint(anchor0, rel01, lambdaA);
+    vec2 footB = geodesicPoint(anchor0, rel01, lambdaB);
+    vec2 footC = geodesicPoint(anchor0, rel01, lambdaC);
+
+    float scoreA = hyperDist2(s, footA);
+    float scoreB = hyperDist2(s, footB);
+    float scoreC = hyperDist2(s, footC);
+
+    bestScore = scoreB;
+    if (scoreA < bestScore) {
+      bestScore = scoreA;
+      bestLambda = lambdaA;
+    }
+    if (scoreC < bestScore) {
+      bestScore = scoreC;
+      bestLambda = lambdaC;
+    }
+
+    radius *= 0.5;
+  }
+
+  vec2 foot = geodesicPoint(anchor0, rel01, bestLambda);
+  vec2 fwd = diskLogMap(anchor1, foot);
+  vec2 back = diskLogMap(anchor0, foot);
+  vec2 tangent = fwd - back;
+  if (dot(tangent, tangent) < 1e-8) tangent = rel01;
+  float tangentLen = length(tangent);
+  tangent = tangentLen < 1e-8 ? vec2(1.0, 0.0) : tangent / tangentLen;
+  vec2 normal = vec2(-tangent.y, tangent.x);
+
+  vec2 local = diskLogMap(s, foot);
+  float qx = mix(base0, base1, bestLambda) + dot(local, tangent) / max(uScaleH, 1e-5);
+  float qy = dot(local, normal) / max(uScaleH, 1e-5);
+  return vec3(qx, qy, bestScore);
+}
+
+vec3 wordCoords(vec2 s) {
+  float bestScore = 1e9;
+  vec2 bestQ = vec2(0.0);
+  for (int i = 0; i < ${stripSampleCount - 1}; i++) {
+    vec3 candidate = segmentWordCoords(s, uStripSamples[i], uStripSamples[i + 1]);
+    float score = candidate.z;
+    if (score < bestScore) {
+      bestScore = score;
+      bestQ = candidate.xy;
+    }
+  }
+  return vec3(bestQ, sqrt(bestScore));
+}
+`;
+
+  return /* glsl */`
+#ifdef GL_OES_standard_derivatives
+#extension GL_OES_standard_derivatives : enable
+#endif
+
+#ifdef GL_ES
+precision highp float;
+#endif
+
+uniform vec2 uResolution;
+uniform vec2 uPan;
+uniform float uScaleH;
+uniform vec4 uSampleBounds;
+uniform vec4 uStripSamples[${stripSampleCount}];
+${stripRangeUniform}
+uniform vec4 uSegments[${segmentCount}];
+uniform vec4 uGlyphBoxes[${glyphCount}];
+uniform vec2 uGlyphSegmentMeta[${glyphCount}];
+uniform vec3 uColor;
+
+vec2 cdiv(vec2 a, vec2 b) {
+  float den = dot(b, b);
+  return vec2((a.x*b.x + a.y*b.y)/den, (a.y*b.x - a.x*b.y)/den);
+}
+
+vec2 diskTranslate(vec2 z, vec2 a) {
+  float aa = dot(a, a);
+  if (aa < 1e-8) return z;
+  if (aa > 0.92*0.92) a *= 0.92 / sqrt(aa);
+  vec2 num = z + a;
+  vec2 den = vec2(1.0 + a.x*z.x + a.y*z.y, a.x*z.y - a.y*z.x);
+  return cdiv(num, den);
+}
+
+float atanhApprox(float x) {
+  float xc = clamp(x, -0.9995, 0.9995);
+  return 0.5 * log((1.0 + xc) / max(1.0 - xc, 1e-6));
+}
+
+vec2 diskLogOrigin(vec2 z) {
+  float r = length(z);
+  if (r < 1e-6) return vec2(0.0);
+  return z * (2.0 * atanhApprox(r) / r);
+}
+
+vec2 diskExpOrigin(vec2 u) {
+  float lenU = length(u);
+  if (lenU < 1e-6) return vec2(0.0);
+  float e = exp(lenU);
+  float th = (e - 1.0) / max(e + 1.0, 1e-6);
+  return u * (th / lenU);
+}
+
+vec2 diskLogMap(vec2 p, vec2 anchor) {
+  vec2 w = diskTranslate(p, -anchor);
+  return diskLogOrigin(w);
+}
+
+vec2 geodesicPoint(vec2 anchor0, vec2 rel01, float t) {
+  return diskTranslate(diskExpOrigin(rel01 * t), anchor0);
+}
+
+float sdSegment(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a;
+  vec2 ba = b - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+
+float hyperDist2(vec2 a, vec2 b) {
+  vec2 d = diskLogMap(a, b);
+  return dot(d, d);
+}
+
+${wordCoordFunctions}
+
+void main() {
+  vec2 R = uResolution.xy;
+  vec2 s0 = (2.0 * gl_FragCoord.xy - R) / R.y;
+  vec2 s = diskTranslate(s0, -uPan);
+  if (dot(s, s) >= 0.9995) discard;
+
+  vec3 mapped = wordCoords(s);
+  vec2 q = mapped.xy;
+  vec2 sampleMin = uSampleBounds.xy;
+  vec2 sampleMax = uSampleBounds.zw;
+  if (q.x < sampleMin.x - 0.06 || q.x > sampleMax.x + 0.06 || q.y < sampleMin.y - 0.06 || q.y > sampleMax.y + 0.06) discard;
+  float stripHalfWidth = max(max(-sampleMin.y, sampleMax.y), 0.0) + 0.20;
+  if (mapped.z > stripHalfWidth) discard;
+  float aa = max(0.004, 0.75 * length(fwidth(q)));
+  float alpha = 0.0;
+  for (int g = 0; g < ${glyphCount}; g++) {
+    vec4 glyphBox = uGlyphBoxes[g];
+    if (
+      q.x < glyphBox.x - 0.08 || q.x > glyphBox.z + 0.08 ||
+      q.y < glyphBox.y - 0.08 || q.y > glyphBox.w + 0.08
+    ) {
+      continue;
+    }
+
+    vec2 meta = uGlyphSegmentMeta[g];
+    float segStart = meta.x;
+    float segEnd = meta.x + meta.y;
+    float dist = 1e9;
+    float winding = 0.0;
+    for (int i = 0; i < ${segmentCount}; i++) {
+      float fi = float(i);
+      if (fi < segStart || fi >= segEnd) continue;
+      vec2 a = uSegments[i].xy;
+      vec2 b = uSegments[i].zw;
+      dist = min(dist, sdSegment(q, a, b));
+      bool upCross = (a.y <= q.y) && (b.y > q.y);
+      bool downCross = (a.y > q.y) && (b.y <= q.y);
+      if (upCross || downCross) {
+        float x = a.x + (q.y - a.y) * (b.x - a.x) / (b.y - a.y);
+        if (x > q.x) winding += upCross ? 1.0 : -1.0;
+      }
+    }
+    if (abs(winding) > 0.5) dist = -dist;
+    alpha = max(alpha, 1.0 - smoothstep(-aa, aa, dist));
+  }
+  if (alpha < 0.01) discard;
+  gl_FragColor = vec4(uColor, alpha);
+}
+`;
+}
+
+const material = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader: baseFragmentShader,
+  uniforms: {
+    uResolution: { value: new THREE.Vector2(window.innerWidth * DPR, window.innerHeight * DPR) }
+  }
+});
+
+const mesh = new THREE.Mesh(quad, material);
+mesh.renderOrder = 0;
+scene.add(mesh);
+
+const glyphMaterials = [];
+for (const glyph of sentenceLayout.glyphs) {
+  const glyphMaterial = new THREE.ShaderMaterial({
+    vertexShader,
+    fragmentShader: glyphFragmentShader,
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+    uniforms: {
+      uResolution: { value: new THREE.Vector2(window.innerWidth * DPR, window.innerHeight * DPR) },
+      uPan: { value: new THREE.Vector2() },
+      uAnchor: { value: glyph.anchor.clone() },
+      uTangent: { value: glyph.tangent.clone() },
+      uNormal: { value: glyph.normal.clone() },
+      uGlyphOffset: { value: glyph.offset.clone() },
+      uScaleH: { value: glyph.scaleH },
+      uSampleBounds: { value: glyph.sampleBounds.clone() },
+      uSegmentCount: { value: glyph.segmentCount },
+      uSegments: { value: glyph.segments.map((seg) => seg.clone()) },
+      uColor: { value: new THREE.Color(0x000000) }
+    }
+  });
+
+  const glyphMesh = new THREE.Mesh(quad, glyphMaterial);
+  glyphMesh.renderOrder = 10;
+  scene.add(glyphMesh);
+  glyphMaterials.push(glyphMaterial);
+}
+
+const compoundWordMaterials = [];
+compoundWordLayouts.forEach((compoundWordLayout, index) => {
+  const compoundUniforms = {
+    uResolution: { value: new THREE.Vector2(window.innerWidth * DPR, window.innerHeight * DPR) },
+    uPan: { value: new THREE.Vector2() },
+    uScaleH: { value: compoundWordLayout.scaleH },
+    uSampleBounds: { value: compoundWordLayout.sampleBounds.clone() },
+    uStripSamples: { value: compoundWordLayout.stripSamples.map((sample) => sample.clone()) },
+    uSegments: { value: compoundWordLayout.segments.map((seg) => seg.clone()) },
+    uGlyphBoxes: { value: compoundWordLayout.glyphBoxes.map((box) => box.clone()) },
+    uGlyphSegmentMeta: { value: compoundWordLayout.glyphSegmentMeta.map((meta) => meta.clone()) },
+    uColor: { value: new THREE.Color(0x000000) }
+  };
+  if (COMPOUND_SOLVER === "approx") {
+    compoundUniforms.uStripRanges = { value: compoundWordLayout.stripRanges.map((range) => range.clone()) };
+  }
+
+  const compoundWordMaterial = new THREE.ShaderMaterial({
+    vertexShader,
+    fragmentShader: makeCompoundWordFragmentShader(
+      compoundWordLayout.stripSamples.length,
+      compoundWordLayout.segmentCount,
+      compoundWordLayout.glyphBoxes.length,
+      COMPOUND_SOLVER
+    ),
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+    uniforms: compoundUniforms
+  });
+
+  const compoundWordMesh = new THREE.Mesh(quad, compoundWordMaterial);
+  compoundWordMesh.renderOrder = 11 + index;
+  scene.add(compoundWordMesh);
+  compoundWordMaterials.push(compoundWordMaterial);
+});
+
+function onResize() {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  material.uniforms.uResolution.value.set(window.innerWidth * DPR, window.innerHeight * DPR);
+  for (const glyphMaterial of glyphMaterials) {
+    glyphMaterial.uniforms.uResolution.value.set(window.innerWidth * DPR, window.innerHeight * DPR);
+  }
+  for (const compoundWordMaterial of compoundWordMaterials) {
+    compoundWordMaterial.uniforms.uResolution.value.set(window.innerWidth * DPR, window.innerHeight * DPR);
+  }
+}
+window.addEventListener("resize", onResize);
+
+function setPanFromEvent(e) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * DPR;
+  const y = (rect.height - (e.clientY - rect.top)) * DPR;
+  const panX = (2.0 * x - rect.width * DPR) / (rect.height * DPR);
+  const panY = (2.0 * y - rect.height * DPR) / (rect.height * DPR);
+  for (const glyphMaterial of glyphMaterials) {
+    glyphMaterial.uniforms.uPan.value.set(panX, panY);
+  }
+  for (const compoundWordMaterial of compoundWordMaterials) {
+    compoundWordMaterial.uniforms.uPan.value.set(panX, panY);
+  }
+}
+
+renderer.domElement.addEventListener("pointermove", setPanFromEvent);
+
+renderer.setAnimationLoop(() => {
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
