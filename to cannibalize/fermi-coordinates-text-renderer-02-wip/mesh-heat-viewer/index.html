@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mesh Typography</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #f3f1ea;
+      color: #16202b;
+      font: 500 14px/1.35 "Segoe UI", sans-serif;
+    }
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+    #controls {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 20;
+      width: min(320px, calc(100vw - 28px));
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid rgba(22, 32, 43, 0.14);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 12px 28px rgba(22, 32, 43, 0.14);
+      backdrop-filter: blur(8px);
+    }
+    #controls h1 {
+      margin: 0;
+      font: 600 16px/1.15 "Segoe UI", sans-serif;
+      letter-spacing: 0.02em;
+    }
+    #controls p {
+      margin: 0;
+      color: rgba(22, 32, 43, 0.78);
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .row label {
+      font-weight: 600;
+    }
+    .row select,
+    .row input[type="range"] {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .row select {
+      padding: 7px 9px;
+      border: 1px solid rgba(22, 32, 43, 0.18);
+      border-radius: 8px;
+      background: white;
+      color: inherit;
+      font: inherit;
+    }
+    .toggle-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 12px;
+      align-items: center;
+    }
+    .toggle-row label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #summary {
+      padding-top: 8px;
+      border-top: 1px solid rgba(22, 32, 43, 0.1);
+      color: rgba(22, 32, 43, 0.78);
+      font-size: 13px;
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="controls">
+    <div class="row">
+      <label for="field-select">Field</label>
+      <select id="field-select"></select>
+    </div>
+    <div class="row">
+      <label for="overlay-opacity">Text</label>
+      <input id="overlay-opacity" type="range" min="0" max="1" step="0.01" value="0.9" />
+    </div>
+    <div class="toggle-row">
+      <label><input id="show-centerline" type="checkbox" checked /> Geodesic</label>
+      <label><input id="show-isolines" type="checkbox" checked /> Grid</label>
+      <label><input id="show-text" type="checkbox" checked /> Overlay</label>
+      <label><input id="wireframe" type="checkbox" /> Wireframe</label>
+      <label><input id="flat-shading" type="checkbox" /> Flat</label>
+    </div>
+    <div id="summary"></div>
+  </div>
+  <script type="module" src="/mesh-heat-viewer/viewer.js"></script>
+</body>
+</html>
