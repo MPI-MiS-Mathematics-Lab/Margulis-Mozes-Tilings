@@ -166,6 +166,48 @@ const shaderPresets = {
       }
     ]
   },
+  margulismozessdf3coloruhpevenm: {
+    path: './shaders/margulisMozesSdf3colorUhpEvenM.frag.glsl',
+    title: 'Margulis-Mozes SDF 3-Color (UHP, even m)',
+    uniforms: [
+      {
+        uniform: 'uThickness',
+        param: 'T',
+        label: 'Thickness',
+        default: 0.04,
+        step: 0.01,
+        min: 0.001,
+        sanitize: (value) => Math.max(0.001, value)
+      },
+      {
+        uniform: 'uChildren',
+        param: 'C',
+        label: 'Children m (even: 2,4,6…)',
+        default: 4,
+        step: 2,
+        min: 2,
+        sanitize: (value) => { let v = Math.max(2, Math.round(value)); return v % 2 === 1 ? v + 1 : v; }
+      },
+      {
+        uniform: 'uParam',
+        param: 'A',
+        label: 'Side parameter a',
+        default: 1.0,
+        step: 0.05,
+        min: 0.01,
+        sanitize: (value) => Math.max(0.01, value)
+      },
+      {
+        uniform: 'uZoom',
+        param: 'Z',
+        label: 'Zoom',
+        default: 1.0,
+        step: 0.1,
+        min: 0.1,
+        sanitize: (value) => Math.max(0.1, value)
+      }
+    ]
+  },
   margulismozessdf3colordisc: {
     path: './shaders/margulisMozesSdf3colorDisc.frag.glsl',
     title: 'Margulis-Mozes SDF 3-Color (Disc)',
