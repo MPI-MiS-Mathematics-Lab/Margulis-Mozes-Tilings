@@ -842,7 +842,12 @@ if (selectedTextureConfig && textureUniformKey) {
 }
 
 // Load fixed textures (multiple textures baked into the preset)
-const fixedTextures = preset.fixedTextures ?? [];
+const texSet = params.get('texset');
+const fixedTextures = (preset.fixedTextures ?? []).map((ft) =>
+  texSet === 'escher'
+    ? { ...ft, path: ft.path.replace(/(tex\d)\.png$/, '$1_escher.png') }
+    : ft
+);
 for (const ft of fixedTextures) {
   const resolvedUrl = textureModules[ft.path];
   if (resolvedUrl) {

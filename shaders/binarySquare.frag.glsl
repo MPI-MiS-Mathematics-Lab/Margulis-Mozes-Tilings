@@ -74,9 +74,9 @@ vec2 diskFromSquare(vec2 z){
 }
 
 vec3 color4(int id){
-  if(id==0) return vec3(0.0, 0.0, 0.0);
-  if(id==1) return vec3(1.0, 0.0, 0.0);
-  return vec3(1.0, 0.8, 0.0);
+  if(id==0) return vec3(0.93,0.40,0.40);
+  if(id==1) return vec3(0.42,0.72,0.98);
+  return vec3(0.52,0.92,0.56);
 }
 
 void main(){
